@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import type { UIProduct, ChatMsg, TrackingStatus, PurchaseAlert, PersonalInfo, ShippingAddress, SavedCardDetails } from "./types";
+import type { UIProduct, ChatMsg, LearnedPreferences, TrackingStatus, PurchaseAlert, PersonalInfo, ShippingAddress, SavedCardDetails } from "./types";
 
 // Hooks
-import { useProfile } from "./hooks/useProfile";
+import { useProfile, mergeLearnedPreferences } from "./hooks/useProfile";
 import { useMessages } from "./hooks/useMessages";
 import { useProducts } from "./hooks/useProducts";
 
@@ -17,6 +17,7 @@ import { IntroPage } from "./components/layout/IntroPage";
 
 // Chat
 import { ChatPanel } from "./components/chat/ChatPanel";
+import { PreferencesPanel } from "./components/chat/PreferencesPanel";
 
 // Products
 import { ProductCard } from "./components/products/ProductCard";
@@ -86,15 +87,15 @@ export default function CliqApp() {
       if (!text.trim() || loading) return;
       if (!hasSearched) {
         setHasSearched(true);
-        setMessages([{ id: "w", role: "agent", text: "Searching for the best options for you...", options: [], products: [] }]);
+        setMessages([{ id: "w", role: "agent", text: "Let me think about what you need...", thinking: null, options: [], products: [] }]);
       }
-      const userMsg: ChatMsg = { id: mkId(), role: "user", text, options: [], products: [] };
+      const userMsg: ChatMsg = { id: mkId(), role: "user", text, thinking: null, options: [], products: [] };
       setMessages((p) => [...p, userMsg]);
       setLoading(true);
       try {
         const history = messages
           .filter((m) => m.role !== "follow_up")
-          .slice(-8)
+          .slice(-10)
           .map((m) => ({ role: m.role, text: m.text }));
         const result = await searchBackend(text, profile, history);
 
@@ -104,12 +105,34 @@ export default function CliqApp() {
           search_history: [{ query: text, timestamp: new Date().toISOString(), result_count: result.products.length }, ...prev.search_history].slice(0, 50),
         }));
 
+        // Merge any learned preferences from the AI
+        if (result.learned_preferences) {
+          setProfile((prev) => ({
+            ...prev,
+            learned: mergeLearnedPreferences(prev.learned, result.learned_preferences!),
+          }));
+        }
+
         if (result.ambiguous && result.follow_up_question) {
-          setMessages((p) => [...p, { id: mkId(), role: "follow_up", text: result.follow_up_question!, options: result.follow_up_options, products: [] }]);
+          setMessages((p) => [...p, {
+            id: mkId(),
+            role: "follow_up",
+            text: result.follow_up_question!,
+            thinking: result.thinking,
+            options: result.follow_up_options,
+            products: [],
+          }]);
         } else {
           setProducts(result.products);
           setTab("products");
-          setMessages((p) => [...p, { id: mkId(), role: "agent", text: result.summary, options: [], products: result.products }]);
+          setMessages((p) => [...p, {
+            id: mkId(),
+            role: "agent",
+            text: result.summary,
+            thinking: result.thinking,
+            options: [],
+            products: result.products,
+          }]);
 
           // Update prices for any tracked products
           result.products.forEach((rp: UIProduct) => {
@@ -128,7 +151,7 @@ export default function CliqApp() {
           });
         }
       } catch {
-        setMessages((p) => [...p, { id: mkId(), role: "agent", text: "Something went wrong. Please try again.", options: [], products: [] }]);
+        setMessages((p) => [...p, { id: mkId(), role: "agent", text: "Something went wrong. Please try again.", thinking: null, options: [], products: [] }]);
       }
       setLoading(false);
     },
@@ -148,9 +171,9 @@ export default function CliqApp() {
             w.product_id === product.id ? { ...w, current_price: product.price, price_history: [...w.price_history, { price: product.price, date: new Date().toISOString() }] } : w
           ),
         }));
-        setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Price updated for "${product.title}": $${existing.current_price.toFixed(2)} \u2192 $${product.price.toFixed(2)}`, options: [], products: [] }]);
+        setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Price updated for "${product.title}": $${existing.current_price.toFixed(2)} \u2192 $${product.price.toFixed(2)}`, thinking: null, options: [], products: [] }]);
       } else {
-        setMessages((p) => [...p, { id: mkId(), role: "agent", text: `"${product.title}" is already on your watchlist.`, options: [], products: [] }]);
+        setMessages((p) => [...p, { id: mkId(), role: "agent", text: `"${product.title}" is already on your watchlist.`, thinking: null, options: [], products: [] }]);
       }
     } else {
       setProfile((p) => ({
@@ -172,7 +195,7 @@ export default function CliqApp() {
           },
         ],
       }));
-      setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Added "${product.title}" to your watchlist. I'll keep an eye on the price for you.`, options: [], products: [] }]);
+      setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Added "${product.title}" to your watchlist. I'll keep an eye on the price for you.`, thinking: null, options: [], products: [] }]);
     }
   };
 
@@ -182,7 +205,7 @@ export default function CliqApp() {
       ...p,
       purchase_history: [...p.purchase_history, { product_id: product.id, product_title: product.title, price: product.price, category: product.category, card_used: cardName, timestamp: new Date().toISOString() }],
     }));
-    setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Order placed for ${product.title} at $${product.price.toFixed(2)}! \u{1F389} (Simulated \u2014 no real charge)`, options: [], products: [] }]);
+    setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Order placed for ${product.title} at $${product.price.toFixed(2)}! \u{1F389} (Simulated \u2014 no real charge)`, thinking: null, options: [], products: [] }]);
   };
 
   const saveCard = (card: SavedCardDetails) => setProfile((p) => ({ ...p, saved_card: card }));
@@ -197,6 +220,27 @@ export default function CliqApp() {
     clearMessages();
     setInput("");
     localStorage.removeItem("cliq_has_searched");
+  };
+
+  const handleUpdateLearned = (updated: LearnedPreferences) => {
+    setProfile((p) => ({ ...p, learned: updated }));
+  };
+
+  const handleClearLearned = () => {
+    setProfile((p) => ({
+      ...p,
+      learned: {
+        gender: null,
+        age_range: null,
+        style: null,
+        interests: [],
+        sizes: {},
+        dislikes: [],
+        use_cases: [],
+        favorite_colors: [],
+        climate: null,
+      },
+    }));
   };
 
   // ── Google-style Intro Page ──────────────────────────
@@ -228,8 +272,15 @@ export default function CliqApp() {
 
       {/* Main */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Chat Panel */}
-        <ChatPanel messages={messages} loading={loading} onSend={send} />
+        {/* Chat + Preferences Panel */}
+        <div style={{ flex: "0 0 38%", display: "flex", flexDirection: "column", borderRight: "1px solid var(--border-default)" }}>
+          <ChatPanel messages={messages} loading={loading} learned={profile.learned} onSend={send} />
+          <PreferencesPanel
+            learned={profile.learned}
+            onUpdate={handleUpdateLearned}
+            onClear={handleClearLearned}
+          />
+        </div>
 
         {/* Right Panel */}
         <motion.div

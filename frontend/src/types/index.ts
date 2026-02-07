@@ -3,6 +3,7 @@ export type {
   BackendProduct,
   UIProduct,
   ChatMsg,
+  LearnedPreferences,
   ShippingAddress,
   PersonalInfo,
   SavedCardDetails,

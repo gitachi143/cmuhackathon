@@ -1,7 +1,19 @@
 import { useState, useEffect } from "react";
-import type { UserProfile, WatchlistItem } from "../types";
+import type { UserProfile, LearnedPreferences, WatchlistItem } from "../types";
 
 const STORAGE_KEY = "cliq_profile_v2";
+
+const DEFAULT_LEARNED: LearnedPreferences = {
+  gender: null,
+  age_range: null,
+  style: null,
+  interests: [],
+  sizes: {},
+  dislikes: [],
+  use_cases: [],
+  favorite_colors: [],
+  climate: null,
+};
 
 const DEFAULTS: UserProfile = {
   id: "default_user",
@@ -11,6 +23,7 @@ const DEFAULTS: UserProfile = {
   saved_card: null,
   personal_info: { name: "", email: "" },
   shipping_address: { address_line: "", city: "", state: "", zip: "" },
+  learned: { ...DEFAULT_LEARNED },
   purchase_history: [],
   watchlist: [],
   search_history: [],
@@ -30,6 +43,7 @@ function loadProfile(): UserProfile {
         ...parsed,
         personal_info: { ...DEFAULTS.personal_info, ...(parsed.personal_info || {}) },
         shipping_address: { ...DEFAULTS.shipping_address, ...(parsed.shipping_address || {}) },
+        learned: { ...DEFAULT_LEARNED, ...(parsed.learned || {}) },
         search_history: parsed.search_history || [],
         watchlist: (parsed.watchlist || []).map((w: WatchlistItem) => ({
           product_id: w.product_id,
@@ -50,6 +64,24 @@ function loadProfile(): UserProfile {
     /* ignore corrupted localStorage */
   }
   return DEFAULTS;
+}
+
+/** Merge new learned prefs into existing ones (additive — never overwrites with null). */
+export function mergeLearnedPreferences(
+  existing: LearnedPreferences,
+  incoming: Partial<LearnedPreferences>
+): LearnedPreferences {
+  return {
+    gender: incoming.gender ?? existing.gender,
+    age_range: incoming.age_range ?? existing.age_range,
+    style: incoming.style ?? existing.style,
+    interests: [...new Set([...existing.interests, ...(incoming.interests || [])])],
+    sizes: { ...existing.sizes, ...(incoming.sizes || {}) },
+    dislikes: [...new Set([...existing.dislikes, ...(incoming.dislikes || [])])],
+    use_cases: [...new Set([...existing.use_cases, ...(incoming.use_cases || [])])],
+    favorite_colors: [...new Set([...existing.favorite_colors, ...(incoming.favorite_colors || [])])],
+    climate: incoming.climate ?? existing.climate,
+  };
 }
 
 export function useProfile() {

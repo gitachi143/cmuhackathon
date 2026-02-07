@@ -17,6 +17,7 @@ export async function searchBackend(
         price_sensitivity: profile.price_sensitivity,
         shipping_preference: profile.shipping_preference,
         preferred_brands: profile.preferred_brands,
+        learned: profile.learned,
       },
       conversation_history: history.map((h) => ({ role: h.role, content: h.text })),
     }),
@@ -25,9 +26,11 @@ export async function searchBackend(
   const data = await res.json();
   return {
     summary: data.agent_message || "Here are my top picks:",
+    thinking: data.thinking || null,
     products: (data.products || []).map(mapProduct),
     follow_up_question: data.follow_up_question?.question || null,
     follow_up_options: data.follow_up_question?.options || [],
     ambiguous: !!data.follow_up_question,
+    learned_preferences: data.learned_preferences || null,
   };
 }

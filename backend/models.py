@@ -15,11 +15,27 @@ class ShippingPreference(str, Enum):
     cheapest = "cheapest"
 
 
+class LearnedPreferences(BaseModel):
+    gender: Optional[str] = None
+    age_range: Optional[str] = None
+    style: Optional[str] = None
+    interests: List[str] = []
+    sizes: dict = {}               # e.g. {"shirt": "M", "shoe": "10"}
+    dislikes: List[str] = []
+    use_cases: List[str] = []      # e.g. ["hiking", "office", "travel"]
+    favorite_colors: List[str] = []
+    climate: Optional[str] = None  # e.g. "cold", "tropical", "temperate"
+
+    class Config:
+        extra = "allow"
+
+
 class UserProfile(BaseModel):
     price_sensitivity: QualityLevel = QualityLevel.balanced
     shipping_preference: ShippingPreference = ShippingPreference.normal
     preferred_brands: List[str] = []
     saved_card: Optional[dict] = None
+    learned: LearnedPreferences = LearnedPreferences()
 
 
 class SearchRequest(BaseModel):
@@ -84,9 +100,11 @@ class ShoppingIntent(BaseModel):
 
 class SearchResponse(BaseModel):
     agent_message: str
+    thinking: Optional[str] = None
     intent: Optional[ShoppingIntent] = None
     products: List[Product] = []
     follow_up_question: Optional[FollowUpQuestion] = None
+    learned_preferences: Optional[LearnedPreferences] = None
 
 
 class PurchaseRecord(BaseModel):
