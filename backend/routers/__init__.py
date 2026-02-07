@@ -5,6 +5,7 @@ from .watchlist import router as watchlist_router
 from .coupons import router as coupons_router
 from .spending import router as spending_router
 from .tracking import router as tracking_router
+from .checkout import router as checkout_router
 
 __all__ = [
     "search_router",
@@ -14,4 +15,5 @@ __all__ = [
     "coupons_router",
     "spending_router",
     "tracking_router",
+    "checkout_router",
 ]

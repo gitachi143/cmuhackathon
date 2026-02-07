@@ -22,6 +22,7 @@ from routers import (
     coupons_router,
     spending_router,
     tracking_router,
+    checkout_router,
 )
 
 
@@ -88,6 +89,7 @@ app.include_router(watchlist_router)
 app.include_router(coupons_router)
 app.include_router(spending_router)
 app.include_router(tracking_router)
+app.include_router(checkout_router)
 
 
 @app.get("/")
@@ -106,5 +108,7 @@ async def root():
             "tracking_status": "GET /api/tracking/status",
             "tracking_heartbeat": "POST /api/tracking/heartbeat",
             "purchase_alerts": "GET /api/tracking/purchase-alerts",
+            "auto_checkout": "POST /api/auto-checkout",
+            "cancel_checkout": "POST /api/auto-checkout/cancel",
         },
     }

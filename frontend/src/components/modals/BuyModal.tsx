@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import type { UIProduct, UserProfile, PersonalInfo, ShippingAddress, SavedCardDetails } from "../../types";
+import { startAutoCheckout, cancelAutoCheckout } from "../../api/checkout";
+import type { CheckoutStatus } from "../../api/checkout";
 
 interface BuyModalProps {
   product: UIProduct;
@@ -13,6 +15,24 @@ interface BuyModalProps {
   onSavePersonalInfo: (info: PersonalInfo) => void;
   onSaveAddress: (addr: ShippingAddress) => void;
 }
+
+const STEP_ICONS: Record<string, string> = {
+  launching: "\u{1F680}",
+  navigating: "\u{1F310}",
+  searching: "\u{1F50D}",
+  selecting: "\u{1F446}",
+  adding_to_cart: "\u{1F6D2}",
+  added_to_cart: "\u2705",
+  going_to_cart: "\u{1F6D2}",
+  checkout: "\u{1F4B3}",
+  filling_info: "\u270D\uFE0F",
+  info_filled: "\u2705",
+  login_required: "\u{1F512}",
+  done: "\u{1F389}",
+  error: "\u274C",
+  warning: "\u26A0\uFE0F",
+  cancelled: "\u23F9\uFE0F",
+};
 
 export function BuyModal({
   product,
@@ -38,6 +58,12 @@ export function BuyModal({
   const [zip, setZip] = useState(shippingAddress.zip || "");
   const [success, setSuccess] = useState(false);
 
+  // Auto-checkout state
+  const [autoCheckoutActive, setAutoCheckoutActive] = useState(false);
+  const [statusLog, setStatusLog] = useState<CheckoutStatus[]>([]);
+  const [autoCheckoutDone, setAutoCheckoutDone] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
   const fullAddress = [addressLine, city, addrState, zip].filter(Boolean).join(", ");
   const autofillFields = {
     name: name || personalInfo.name || "Not set",
@@ -59,6 +85,191 @@ export function BuyModal({
     color: "var(--text-primary)",
   };
 
+  const handleAutoCheckout = () => {
+    const info: PersonalInfo = { name: name || personalInfo.name, email: email || personalInfo.email };
+    const addr: ShippingAddress = {
+      address_line: addressLine || shippingAddress.address_line,
+      city: city || shippingAddress.city,
+      state: addrState || shippingAddress.state,
+      zip: zip || shippingAddress.zip,
+    };
+
+    setAutoCheckoutActive(true);
+    setStatusLog([]);
+    setAutoCheckoutDone(false);
+    setStep("auto");
+
+    startAutoCheckout(
+      product.title,
+      info,
+      addr,
+      (status) => {
+        setStatusLog((prev) => [...prev, status]);
+        // Auto-scroll
+        setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      },
+      () => {
+        setAutoCheckoutDone(true);
+        setAutoCheckoutActive(false);
+      },
+      (err) => {
+        setStatusLog((prev) => [...prev, { step: "error", message: err }]);
+        setAutoCheckoutDone(true);
+        setAutoCheckoutActive(false);
+      }
+    );
+  };
+
+  const handleCancelAuto = () => {
+    cancelAutoCheckout();
+    setAutoCheckoutActive(false);
+    setAutoCheckoutDone(true);
+    setStatusLog((prev) => [...prev, { step: "cancelled", message: "Cancelled by user." }]);
+  };
+
+  // ── Auto-checkout live view ────────────────────────
+  if (step === "auto") {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "var(--overlay)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 50,
+        }}
+      >
+        <motion.div
+          initial={{ scale: 0.9, y: 20 }}
+          animate={{ scale: 1, y: 0 }}
+          style={{
+            background: "var(--bg-surface)",
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 440,
+            width: "90%",
+            maxHeight: "80vh",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, color: "var(--text-primary)", fontSize: 16 }}>
+              {"\u{1F916}"} Auto-Checkout on Amazon
+            </h3>
+            {autoCheckoutActive && (
+              <span
+                style={{
+                  fontSize: 11,
+                  padding: "3px 10px",
+                  borderRadius: 99,
+                  background: "#22c55e20",
+                  color: "#22c55e",
+                  fontWeight: 600,
+                  animation: "pulse 1.5s ease-in-out infinite",
+                }}
+              >
+                LIVE
+              </span>
+            )}
+          </div>
+
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+            {product.title} &middot; ${product.price.toFixed(2)}
+          </div>
+
+          {/* Status log */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              background: "var(--bg-surface-hover, #0a0a0a)",
+              borderRadius: 10,
+              padding: 12,
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              fontSize: 12,
+              minHeight: 200,
+              maxHeight: 340,
+            }}
+          >
+            {statusLog.length === 0 && (
+              <div style={{ color: "var(--text-faint)", textAlign: "center", padding: 20 }}>
+                Starting automation...
+              </div>
+            )}
+            {statusLog.map((s, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: "6px 0",
+                  borderBottom: i < statusLog.length - 1 ? "1px solid var(--border-default, #222)" : "none",
+                  color:
+                    s.step === "error" ? "#ef4444" :
+                    s.step === "done" ? "#22c55e" :
+                    s.step === "warning" || s.step === "login_required" ? "#f59e0b" :
+                    "var(--text-secondary)",
+                }}
+              >
+                <span style={{ flexShrink: 0 }}>{STEP_ICONS[s.step] || "\u2022"}</span>
+                <span>{s.message}</span>
+              </motion.div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            {autoCheckoutActive ? (
+              <button
+                onClick={handleCancelAuto}
+                style={{
+                  flex: 1,
+                  background: "#ef444420",
+                  color: "#ef4444",
+                  border: "1px solid #ef444440",
+                  borderRadius: 8,
+                  padding: "10px 0",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Cancel
+              </button>
+            ) : autoCheckoutDone ? (
+              <button
+                onClick={onClose}
+                style={{
+                  flex: 1,
+                  background: "var(--bg-btn-primary)",
+                  color: "var(--text-on-primary)",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "10px 0",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Done
+              </button>
+            ) : null}
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
+  // ── Success screen ──────────────────────────────────
   if (success) {
     return (
       <motion.div
@@ -114,6 +325,7 @@ export function BuyModal({
     );
   }
 
+  // ── Main modal ──────────────────────────────────────
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -247,41 +459,68 @@ export function BuyModal({
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={onClose}
-                style={{
-                  flex: 1,
-                  background: "var(--bg-btn-secondary)",
-                  border: "1px solid var(--border-default)",
-                  borderRadius: 8,
-                  padding: "10px 0",
-                  cursor: "pointer",
-                  fontWeight: 500,
-                  color: "var(--text-primary)",
-                }}
-              >
-                Cancel
-              </button>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Auto-checkout on Amazon button */}
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  setSuccess(true);
-                  onConfirm(product, savedCard?.nickname || nickname);
-                }}
+                onClick={handleAutoCheckout}
                 style={{
-                  flex: 2,
-                  background: "var(--bg-btn-primary)",
-                  color: "var(--text-on-primary)",
+                  width: "100%",
+                  background: "linear-gradient(135deg, #ff9900, #ffad33)",
+                  color: "#0f1111",
                   border: "none",
                   borderRadius: 8,
-                  padding: "10px 0",
-                  fontWeight: 600,
+                  padding: "12px 0",
+                  fontWeight: 700,
                   cursor: "pointer",
+                  fontSize: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
                 }}
               >
-                Confirm Purchase
+                <span>{"\u{1F916}"}</span>
+                Auto-Checkout on Amazon
               </motion.button>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={onClose}
+                  style={{
+                    flex: 1,
+                    background: "var(--bg-btn-secondary)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: 8,
+                    padding: "10px 0",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    setSuccess(true);
+                    onConfirm(product, savedCard?.nickname || nickname);
+                  }}
+                  style={{
+                    flex: 2,
+                    background: "var(--bg-btn-primary)",
+                    color: "var(--text-on-primary)",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "10px 0",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Simulate Purchase
+                </motion.button>
+              </div>
             </div>
           </>
         )}
