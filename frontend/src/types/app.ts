@@ -52,11 +52,24 @@ export interface ChatMsg {
   id: string;
   role: "user" | "agent" | "follow_up";
   text: string;
+  thinking?: string | null;
   options: string[];
   products: UIProduct[];
 }
 
 // ── User / profile types ──────────────────────────────────
+
+export interface LearnedPreferences {
+  gender: string | null;
+  age_range: string | null;
+  style: string | null;
+  interests: string[];
+  sizes: Record<string, string>;
+  dislikes: string[];
+  use_cases: string[];
+  favorite_colors: string[];
+  climate: string | null;
+}
 
 export interface ShippingAddress {
   address_line: string;
@@ -105,6 +118,7 @@ export interface UserProfile {
   saved_card: SavedCardDetails | null;
   personal_info: PersonalInfo;
   shipping_address: ShippingAddress;
+  learned: LearnedPreferences;
   purchase_history: {
     product_id: string;
     product_title: string;
@@ -121,8 +135,10 @@ export interface UserProfile {
 
 export interface SearchResult {
   summary: string;
+  thinking: string | null;
   products: UIProduct[];
   follow_up_question: string | null;
   follow_up_options: string[];
   ambiguous: boolean;
+  learned_preferences: Partial<LearnedPreferences> | null;
 }
