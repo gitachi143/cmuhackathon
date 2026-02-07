@@ -223,8 +223,6 @@ export default function CliqApp() {
   const savePersonalInfo = (info: PersonalInfo) => setProfile((p) => ({ ...p, personal_info: info }));
   const saveAddress = (addr: ShippingAddress) => setProfile((p) => ({ ...p, shipping_address: addr }));
 
-  const totalSpent = profile.purchase_history.reduce((s, p) => s + p.price, 0);
-
   const handleReset = () => {
     setHasSearched(false);
     clearProducts();
@@ -275,7 +273,6 @@ export default function CliqApp() {
         input={input}
         setInput={setInput}
         loading={loading}
-        totalSpent={totalSpent}
         watchlistCount={profile.watchlist.length}
         onSend={send}
         onReset={handleReset}

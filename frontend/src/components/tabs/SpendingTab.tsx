@@ -18,9 +18,8 @@ export function SpendingTab({ profile, setProfile, onEditDetails }: SpendingTabP
   return (
     <motion.div key="spend" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
         {[
-          { label: "Total Spent", value: `$${totalSpent.toFixed(2)}`, color: "#6366f1" },
           { label: "Purchases", value: `${profile.purchase_history.length}`, color: "#10b981" },
           { label: "Watchlist", value: `${profile.watchlist.length}`, color: "#f59e0b" },
         ].map((c) => (

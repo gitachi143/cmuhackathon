@@ -57,35 +57,6 @@ export function TrackingTab({ trackingStatus, purchaseAlerts, watchlistCount, pu
         </div>
       </div>
 
-      {/* Activity Status */}
-      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Activity Status</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ color: "var(--text-muted)" }}>User Active</span>
-            <span style={{ color: trackingStatus?.user_active ? "#10b981" : "#ef4444", fontWeight: 600 }}>
-              {trackingStatus?.user_active ? "Yes" : "No — tracking paused"}
-            </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ color: "var(--text-muted)" }}>Last Active</span>
-            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
-              {trackingStatus?.last_active ? new Date(trackingStatus.last_active).toLocaleTimeString() : "\u2014"}
-            </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ color: "var(--text-muted)" }}>Tracking pauses after</span>
-            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>24h of inactivity</span>
-          </div>
-          {trackingStatus?.hours_until_pause !== undefined && trackingStatus.hours_until_pause > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: "var(--text-muted)" }}>Time until pause</span>
-              <span style={{ color: "#f59e0b", fontWeight: 600 }}>{trackingStatus.hours_until_pause.toFixed(1)}h remaining</span>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Purchase Price Alerts */}
       {purchaseAlerts.length > 0 && (
         <div style={{ background: "linear-gradient(135deg, #ecfdf5, #d1fae5)", border: "1px solid #6ee7b7", borderRadius: 12, padding: 14 }}>
