@@ -21,6 +21,7 @@ export interface BackendProduct {
   value_tag: string;
   description: string;
   why_recommended: string;
+  image_url?: string | null;
   source_name: string;
   source_url: string;
   category: string;
@@ -39,6 +40,7 @@ export interface UIProduct {
   reviews: number;
   tag: string;
   explanation: string;
+  image_url: string | null;
   source: string;
   url: string;
   category: string;

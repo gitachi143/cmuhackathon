@@ -449,7 +449,7 @@ export default function CliqApp() {
                   profile={profile}
                   setProfile={setProfile}
                   onEditDetails={() =>
-                    setBuyTarget({ id: "__edit__", title: "Edit Info", brand: "", price: 0, original_price: null, shipping_eta: "", rating: 0, reviews: 0, tag: "", explanation: "", source: "", url: "", category: "", coupons: 0, specs: {} })
+                    setBuyTarget({ id: "__edit__", title: "Edit Info", brand: "", price: 0, original_price: null, shipping_eta: "", rating: 0, reviews: 0, tag: "", explanation: "", image_url: null, source: "", url: "", category: "", coupons: 0, specs: {} })
                   }
                 />
               )}

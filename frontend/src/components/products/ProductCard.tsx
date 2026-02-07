@@ -5,6 +5,51 @@ import { getCategoryEmoji } from "../../utils";
 import { useTagColors } from "../../hooks";
 import { Stars } from "../common/Stars";
 
+function ProductImage({ src, category, tagBg }: { src: string | null; category: string; tagBg: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div
+        style={{
+          background: `linear-gradient(135deg, ${tagBg}, var(--bg-muted))`,
+          borderRadius: 8,
+          height: 120,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 28,
+        }}
+      >
+        {getCategoryEmoji(category)}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        borderRadius: 8,
+        height: 120,
+        overflow: "hidden",
+        background: "var(--bg-muted)",
+      }}
+    >
+      <img
+        src={src}
+        alt=""
+        onError={() => setFailed(true)}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+        }}
+      />
+    </div>
+  );
+}
+
 interface ProductCardProps {
   product: UIProduct;
   onBuy: (p: UIProduct) => void;
@@ -57,19 +102,7 @@ export function ProductCard({ product: p, onBuy, onWatch }: ProductCardProps) {
         )}
       </div>
 
-      <div
-        style={{
-          background: `linear-gradient(135deg, ${tc.bg}, var(--bg-muted))`,
-          borderRadius: 8,
-          height: 80,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 28,
-        }}
-      >
-        {getCategoryEmoji(p.category)}
-      </div>
+      <ProductImage src={p.image_url} category={p.category} tagBg={tc.bg} />
 
       <div>
         <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.3 }}>{p.title}</div>

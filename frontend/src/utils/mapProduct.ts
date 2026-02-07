@@ -16,6 +16,7 @@ export function mapProduct(p: BackendProduct): UIProduct {
     reviews: p.review_count,
     tag: p.value_tag,
     explanation: p.why_recommended || p.description,
+    image_url: p.image_url ?? null,
     source: p.source_name,
     url: p.source_url,
     category: p.category,
