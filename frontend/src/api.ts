@@ -3,11 +3,9 @@ import type {
   UserProfile,
   PurchaseRecord,
   SpendingOverview,
-  SpendingAnalytics,
-  SpendingHabits,
   PriceDropsResponse,
-  NessieAccountsResponse,
-  NessiePurchasesResponse,
+  TrackingStatus,
+  PurchaseAlertsResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -67,49 +65,33 @@ export async function getCoupons(
   return res.json();
 }
 
-// ─── Enhanced Analytics API ──────────────────────────────
-
-export async function getSpendingAnalytics(): Promise<SpendingAnalytics> {
-  const res = await fetch(`${API_BASE}/spending/analytics`);
-  if (!res.ok) throw new Error('Failed to get spending analytics');
-  return res.json();
-}
-
-export async function getSpendingHabits(): Promise<SpendingHabits> {
-  const res = await fetch(`${API_BASE}/spending/habits`);
-  if (!res.ok) throw new Error('Failed to get spending habits');
-  return res.json();
-}
-
 export async function getPriceDrops(): Promise<PriceDropsResponse> {
   const res = await fetch(`${API_BASE}/price-drops`);
   if (!res.ok) throw new Error('Failed to get price drops');
   return res.json();
 }
 
-// ─── Capital One Nessie API ─────────────────────────────
+// ─── Price Tracking API ─────────────────────────────────
 
-export async function getNessieAccounts(): Promise<NessieAccountsResponse> {
-  const res = await fetch(`${API_BASE}/nessie/accounts`);
-  if (!res.ok) throw new Error('Failed to get Nessie accounts');
+export async function getTrackingStatus(): Promise<TrackingStatus> {
+  const res = await fetch(`${API_BASE}/tracking/status`);
+  if (!res.ok) throw new Error('Failed to get tracking status');
   return res.json();
 }
 
-export async function getNessiePurchases(accountId?: string): Promise<NessiePurchasesResponse> {
-  const url = accountId
-    ? `${API_BASE}/nessie/purchases?account_id=${accountId}`
-    : `${API_BASE}/nessie/purchases`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to get Nessie purchases');
+export async function sendHeartbeat(): Promise<{ status: string; tracking: boolean; last_active: string }> {
+  const res = await fetch(`${API_BASE}/tracking/heartbeat`, { method: 'POST' });
+  if (!res.ok) throw new Error('Heartbeat failed');
   return res.json();
 }
 
-export async function getNessieMerchants(): Promise<{
-  merchants: { id: string; name: string; category: string[] }[];
-  count: number;
-  connected: boolean;
-}> {
-  const res = await fetch(`${API_BASE}/nessie/merchants`);
-  if (!res.ok) throw new Error('Failed to get Nessie merchants');
+export async function getPurchaseAlerts(): Promise<PurchaseAlertsResponse> {
+  const res = await fetch(`${API_BASE}/tracking/purchase-alerts`);
+  if (!res.ok) throw new Error('Failed to get purchase alerts');
   return res.json();
+}
+
+export async function dismissPurchaseAlert(productId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tracking/purchase-alerts/${productId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to dismiss alert');
 }

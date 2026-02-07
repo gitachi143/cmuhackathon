@@ -44,6 +44,8 @@ class WatchlistItem(BaseModel):
     target_price: Optional[float] = None
     brand: str
     source_url: str
+    category: str = ""
+    price_history: List[dict] = []
 
 
 class Product(BaseModel):

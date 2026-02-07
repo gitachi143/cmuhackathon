@@ -1,11 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from typing import List
+import asyncio
 
 from models import (
     SearchRequest,
@@ -16,16 +14,37 @@ from models import (
     WatchlistItem,
 )
 from ai_service import interpret_query_with_gemini
-from nessie_service import (
-    get_accounts,
-    get_purchases as nessie_get_purchases,
-    get_merchants,
-    compute_spending_analytics,
-    compute_spending_habits,
-    detect_price_drops,
+from tracking_service import (
+    update_activity,
+    get_tracking_status,
+    get_purchase_alerts,
+    clear_purchase_alert,
+    watchlist_tracking_loop,
+    purchase_tracking_loop,
 )
 
-app = FastAPI(title="Cliq — AI Shopping Agent", version="1.0.0")
+
+# ── Background task management ───────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background tracking loops
+    wl_task = asyncio.create_task(
+        watchlist_tracking_loop(
+            get_watchlist=lambda: list(watchlist),
+            update_watchlist_price=_update_watchlist_price,
+        )
+    )
+    pl_task = asyncio.create_task(
+        purchase_tracking_loop(
+            get_purchases=lambda: list(purchase_history),
+        )
+    )
+    yield
+    wl_task.cancel()
+    pl_task.cancel()
+
+
+app = FastAPI(title="Cliq — AI Shopping Agent", version="2.0.0", lifespan=lifespan)
 
 # CORS for frontend dev server
 app.add_middleware(
@@ -36,24 +55,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------------------------------------
-# In-memory storage (replace with DB in production)
-# ------------------------------------------------
+
+# ── Activity tracking middleware ─────────────────────────
+@app.middleware("http")
+async def track_activity(request: Request, call_next):
+    update_activity()
+    response = await call_next(request)
+    return response
+
+
+# ── In-memory storage ────────────────────────────────────
 user_profile = UserProfile()
 purchase_history: List[PurchaseRecord] = []
 watchlist: List[WatchlistItem] = []
 
 
-# ------------------------------------------------
-# Endpoints
-# ------------------------------------------------
+def _update_watchlist_price(product_id: str, new_price: float):
+    """Update a watchlist item's price (called by background tracker)."""
+    for item in watchlist:
+        if item.product_id == product_id:
+            item.price_history.append({
+                "price": new_price,
+                "date": datetime.now().isoformat(),
+            })
+            item.price = new_price
+            break
 
+
+# ── Endpoints ────────────────────────────────────────────
 
 @app.get("/")
 async def root():
     return {
         "message": "Cliq AI Shopping Agent API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "endpoints": {
             "search": "POST /api/search",
             "purchase": "POST /api/purchase",
@@ -62,26 +97,19 @@ async def root():
             "watchlist": "GET|POST|DELETE /api/watchlist",
             "coupons": "GET /api/coupons/{product_id}",
             "spending": "GET /api/spending",
-            "spending_analytics": "GET /api/spending/analytics",
-            "spending_habits": "GET /api/spending/habits",
-            "price_drops": "GET /api/price-drops",
-            "nessie_accounts": "GET /api/nessie/accounts",
-            "nessie_purchases": "GET /api/nessie/purchases",
-            "nessie_merchants": "GET /api/nessie/merchants",
+            "tracking_status": "GET /api/tracking/status",
+            "tracking_heartbeat": "POST /api/tracking/heartbeat",
+            "purchase_alerts": "GET /api/tracking/purchase-alerts",
         },
     }
 
 
 @app.post("/api/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
-    """
-    Main search endpoint. Interprets natural language queries
-    using AI and returns product recommendations.
-    """
+    """Main search endpoint — interprets natural language queries via AI."""
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-    # Use user profile from request or default
     if request.user_profile is None:
         request.user_profile = user_profile
 
@@ -117,50 +145,48 @@ async def get_purchases():
 
 @app.get("/api/profile")
 async def get_profile():
-    """Get user profile/preferences."""
     return user_profile.model_dump()
 
 
 @app.post("/api/profile")
 async def update_profile(profile: UserProfile):
-    """Update user profile/preferences."""
     global user_profile
     user_profile = profile
     return {"status": "success", "profile": user_profile.model_dump()}
 
 
+# ── Watchlist ────────────────────────────────────────────
+
 @app.post("/api/watchlist")
 async def add_to_watchlist(item: WatchlistItem):
-    """Add a product to the watchlist."""
+    """Add a product to the watchlist — tracking starts automatically."""
+    if not item.price_history:
+        item.price_history = [{"price": item.price, "date": datetime.now().isoformat()}]
     watchlist.append(item)
     return {"status": "success", "watchlist": [w.model_dump() for w in watchlist]}
 
 
 @app.get("/api/watchlist")
 async def get_watchlist():
-    """Get the watchlist."""
     return {"watchlist": [w.model_dump() for w in watchlist]}
 
 
 @app.delete("/api/watchlist/{product_id}")
 async def remove_from_watchlist(product_id: str):
-    """Remove a product from the watchlist."""
     global watchlist
     watchlist = [item for item in watchlist if item.product_id != product_id]
     return {"status": "success", "watchlist": [w.model_dump() for w in watchlist]}
 
 
+# ── Coupons ──────────────────────────────────────────────
+
 @app.get("/api/coupons/{product_id}")
 async def get_coupons(product_id: str):
-    """
-    Stub endpoint for coupon/deal retrieval.
-    In production, this would query deal aggregators like Honey, Capital One Shopping, etc.
-    """
     mock_coupons = {
         "wj-001": [{"code": "WINTER20", "discount": "20% off", "source": "RetailMeNot"}],
         "wj-002": [
             {"code": "SAVE15", "discount": "15% off", "source": "Honey"},
-            {"code": "FREESHIP", "discount": "Free shipping", "source": "Capital One Shopping"},
+            {"code": "FREESHIP", "discount": "Free shipping", "source": "Deal Finder"},
         ],
         "mon-001": [{"code": "TECH10", "discount": "$10 off", "source": "Honey"}],
         "hp-003": [{"code": "AUDIO20", "discount": "20% off", "source": "RetailMeNot"}],
@@ -168,9 +194,11 @@ async def get_coupons(product_id: str):
     return {"product_id": product_id, "coupons": mock_coupons.get(product_id, [])}
 
 
+# ── Spending (app purchases only) ────────────────────────
+
 @app.get("/api/spending")
 async def get_spending():
-    """Get spending overview from purchase history."""
+    """Spending overview from in-app purchase history."""
     total_spent = sum(p.price for p in purchase_history)
     by_category: dict[str, float] = {}
     for p in purchase_history:
@@ -184,115 +212,87 @@ async def get_spending():
     }
 
 
-# ─── Enhanced Spending Analytics ──────────────────────────
+# ── Price Tracking Endpoints ─────────────────────────────
+
+@app.get("/api/tracking/status")
+async def tracking_status():
+    """Get live tracking status — is it running? when was user last active?"""
+    status = get_tracking_status()
+    status["watchlist_count"] = len(watchlist)
+    status["purchase_count"] = len(purchase_history)
+    return status
 
 
-@app.get("/api/spending/analytics")
-async def spending_analytics():
-    """
-    Deep spending analytics combining in-app purchases and
-    Capital One Nessie bank transaction data.
-    """
-    # Get bank transactions from Nessie (or mock)
-    bank_purchases = await nessie_get_purchases()
-
-    # Combine with in-app purchases
-    app_purchases = [
-        {
-            "id": p.product_id,
-            "merchant_name": p.brand,
-            "category": p.category.replace("_", " ").title(),
-            "purchase_date": p.timestamp[:10] if "T" in p.timestamp else p.timestamp,
-            "amount": p.price,
-            "status": "completed",
-            "description": p.product_name,
-        }
-        for p in purchase_history
-    ]
-
-    all_purchases = bank_purchases + app_purchases
-    analytics = compute_spending_analytics(all_purchases)
-    analytics["source"] = {
-        "bank_transactions": len(bank_purchases),
-        "app_purchases": len(app_purchases),
-        "nessie_connected": bool(os.getenv("NESSIE_API_KEY")),
+@app.post("/api/tracking/heartbeat")
+async def tracking_heartbeat():
+    """Frontend heartbeat to keep tracking alive."""
+    update_activity()
+    status = get_tracking_status()
+    return {
+        "status": "alive",
+        "tracking": status["tracking_running"],
+        "last_active": status["last_active"],
     }
-    return analytics
 
 
-@app.get("/api/spending/habits")
-async def spending_habits():
-    """
-    Analyze spending habits, patterns, and provide smart insights.
-    """
-    bank_purchases = await nessie_get_purchases()
-    app_purchases = [
-        {
-            "id": p.product_id,
-            "merchant_name": p.brand,
-            "category": p.category.replace("_", " ").title(),
-            "purchase_date": p.timestamp[:10] if "T" in p.timestamp else p.timestamp,
-            "amount": p.price,
-            "status": "completed",
-            "description": p.product_name,
-        }
-        for p in purchase_history
-    ]
-    all_purchases = bank_purchases + app_purchases
-    return compute_spending_habits(all_purchases)
+@app.get("/api/tracking/purchase-alerts")
+async def purchase_alerts():
+    """Get price drop alerts for past purchases."""
+    alerts = get_purchase_alerts()
+    return {
+        "alerts": alerts,
+        "count": len(alerts),
+        "total_potential_savings": round(sum(a["savings"] for a in alerts), 2),
+    }
 
+
+@app.delete("/api/tracking/purchase-alerts/{product_id}")
+async def dismiss_purchase_alert(product_id: str):
+    """Dismiss a purchase price alert."""
+    clear_purchase_alert(product_id)
+    return {"status": "dismissed", "product_id": product_id}
+
+
+# ── Price Drops (watchlist) ──────────────────────────────
 
 @app.get("/api/price-drops")
 async def price_drops():
-    """
-    Detect price drops for watchlist items and return alerts.
-    """
-    watchlist_data = [w.model_dump() for w in watchlist]
-    drops = detect_price_drops(watchlist_data)
+    """Detect price drops for watchlist items."""
+    drops = []
+    for item in watchlist:
+        if len(item.price_history) < 2:
+            continue
+        current = item.price_history[-1]["price"]
+        previous = item.price_history[-2]["price"]
+        original = item.price_history[0]["price"]
+        target = item.target_price
+
+        if current < previous:
+            drop_amt = previous - current
+            drop_pct = (drop_amt / previous) * 100 if previous > 0 else 0
+            total_savings = original - current if current < original else 0
+            hit_target = target is not None and current <= target
+
+            drops.append({
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "current_price": current,
+                "previous_price": previous,
+                "original_price": original,
+                "drop_amount": round(drop_amt, 2),
+                "drop_percent": round(drop_pct, 1),
+                "total_savings": round(total_savings, 2),
+                "target_price": target,
+                "hit_target": hit_target,
+                "brand": item.brand,
+                "category": item.category,
+                "alert_level": "high" if drop_pct >= 15 or hit_target else "medium" if drop_pct >= 5 else "low",
+            })
+
+    drops.sort(key=lambda x: x["drop_percent"], reverse=True)
     return {
         "drops": drops,
         "total_potential_savings": round(sum(d["drop_amount"] for d in drops), 2),
         "items_with_drops": len(drops),
         "watchlist_size": len(watchlist),
-    }
-
-
-# ─── Capital One Nessie API Endpoints ─────────────────────
-
-
-@app.get("/api/nessie/accounts")
-async def nessie_accounts():
-    """Get Capital One bank accounts via Nessie API."""
-    accounts = await get_accounts()
-    total_balance = sum(a.get("balance", 0) for a in accounts)
-    total_rewards = sum(a.get("rewards", 0) for a in accounts)
-    return {
-        "accounts": accounts,
-        "total_balance": round(total_balance, 2),
-        "total_rewards": total_rewards,
-        "connected": bool(os.getenv("NESSIE_API_KEY")),
-    }
-
-
-@app.get("/api/nessie/purchases")
-async def nessie_purchases(account_id: Optional[str] = None):
-    """Get purchase/transaction history from Capital One via Nessie API."""
-    purchases = await nessie_get_purchases(account_id)
-    total = sum(p.get("amount", 0) for p in purchases)
-    return {
-        "purchases": purchases,
-        "total": round(total, 2),
-        "count": len(purchases),
-        "connected": bool(os.getenv("NESSIE_API_KEY")),
-    }
-
-
-@app.get("/api/nessie/merchants")
-async def nessie_merchants_endpoint():
-    """Get merchant data from Capital One via Nessie API."""
-    merchants_list = await get_merchants()
-    return {
-        "merchants": merchants_list,
-        "count": len(merchants_list),
-        "connected": bool(os.getenv("NESSIE_API_KEY")),
     }
