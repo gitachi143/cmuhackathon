@@ -24,11 +24,53 @@ interface ChatMsg {
   text: string; options: string[]; products: UIProduct[];
 }
 
+interface ShippingAddress {
+  address_line: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+interface PersonalInfo {
+  name: string;
+  email: string;
+}
+
+interface SavedCardDetails {
+  nickname: string;
+  card_type: string;
+  is_virtual: boolean;
+  last_four: string;
+}
+
+interface WatchlistItem {
+  product_id: string;
+  product_title: string;
+  current_price: number;
+  target_price: number | null;
+  added_at: string;
+  price_history: { price: number; date: string }[];
+  brand: string;
+  category: string;
+  source: string;
+  url: string;
+  shipping_eta: string;
+}
+
+interface SearchHistoryEntry {
+  query: string;
+  timestamp: string;
+  result_count: number;
+}
+
 interface UserProfile {
   id: string; price_sensitivity: string; shipping_preference: string;
-  preferred_brands: string[]; saved_card: { nickname: string; card_type: string; is_virtual: boolean } | null;
+  preferred_brands: string[]; saved_card: SavedCardDetails | null;
+  personal_info: PersonalInfo;
+  shipping_address: ShippingAddress;
   purchase_history: { product_id: string; product_title: string; price: number; category: string; card_used: string; timestamp: string }[];
-  watchlist: { product_id: string; product_title: string; current_price: number; target_price: number | null }[];
+  watchlist: WatchlistItem[];
+  search_history: SearchHistoryEntry[];
 }
 
 // ── Backend API ────────────────────────────────────────
@@ -249,16 +291,33 @@ function ProductCard({ product: p, onBuy, onWatch }: { product: UIProduct; onBuy
 }
 
 // ── One-Click Buy Modal ────────────────────────────────
-function BuyModal({ product, savedCard, onConfirm, onClose, onSaveCard }: {
+function BuyModal({ product, savedCard, personalInfo, shippingAddress, onConfirm, onClose, onSaveCard, onSavePersonalInfo, onSaveAddress }: {
   product: UIProduct; savedCard: UserProfile["saved_card"];
+  personalInfo: PersonalInfo; shippingAddress: ShippingAddress;
   onConfirm: (p: UIProduct, card: string) => void; onClose: () => void;
   onSaveCard: (card: NonNullable<UserProfile["saved_card"]>) => void;
+  onSavePersonalInfo: (info: PersonalInfo) => void;
+  onSaveAddress: (addr: ShippingAddress) => void;
 }) {
-  const [step, setStep] = useState(savedCard ? "confirm" : "card");
-  const [nickname, setNickname] = useState("Visa ending in 1234");
-  const [isVirtual, setIsVirtual] = useState(false);
+  const needsDetails = !savedCard || !personalInfo.name || !shippingAddress.address_line;
+  const [step, setStep] = useState(needsDetails ? "details" : "confirm");
+  const [nickname, setNickname] = useState(savedCard?.nickname || "Visa ending in 1234");
+  const [lastFour, setLastFour] = useState(savedCard?.last_four || "1234");
+  const [isVirtual, setIsVirtual] = useState(savedCard?.is_virtual || false);
+  const [name, setName] = useState(personalInfo.name || "");
+  const [email, setEmail] = useState(personalInfo.email || "");
+  const [addressLine, setAddressLine] = useState(shippingAddress.address_line || "");
+  const [city, setCity] = useState(shippingAddress.city || "");
+  const [addrState, setAddrState] = useState(shippingAddress.state || "");
+  const [zip, setZip] = useState(shippingAddress.zip || "");
   const [success, setSuccess] = useState(false);
-  const autofillFields = { name: "Alex Johnson", email: "alex@example.com", address: "5032 Forbes Ave, Pittsburgh, PA", card: nickname };
+  const fullAddress = [addressLine, city, addrState, zip].filter(Boolean).join(", ");
+  const autofillFields = {
+    name: name || personalInfo.name || "Not set",
+    email: email || personalInfo.email || "Not set",
+    address: fullAddress || "Not set",
+    card: savedCard?.nickname || nickname,
+  };
 
   if (success) {
     return (
@@ -278,17 +337,51 @@ function BuyModal({ product, savedCard, onConfirm, onClose, onSaveCard }: {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
       <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
         style={{ background: "var(--bg-surface)", borderRadius: 16, padding: 24, maxWidth: 400, width: "90%", maxHeight: "85vh", overflowY: "auto" }}>
-        {step === "card" ? (
+        {step === "details" ? (
           <>
-            <h3 style={{ margin: "0 0 4px", color: "var(--text-primary)" }}>Set Up Payment</h3>
-            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: "0 0 16px" }}>Save a card for one-click purchases</p>
+            <h3 style={{ margin: "0 0 4px", color: "var(--text-primary)" }}>Your Details</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: "0 0 16px" }}>Saved locally for one-click purchases</p>
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Personal Info</div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Full Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Alex Johnson" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 8, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="alex@example.com" type="email" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 12, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Shipping Address</div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Address</label>
+            <input value={addressLine} onChange={e => setAddressLine(e.target.value)} placeholder="5032 Forbes Ave" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 8, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 2 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>City</label>
+                <input value={city} onChange={e => setCity(e.target.value)} placeholder="Pittsburgh" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>State</label>
+                <input value={addrState} onChange={e => setAddrState(e.target.value)} placeholder="PA" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>ZIP</label>
+                <input value={zip} onChange={e => setZip(e.target.value)} placeholder="15213" style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" }}>Payment</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Card Nickname</label>
-            <input value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 12, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+            <input value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 8, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Last 4 Digits</label>
+            <input value={lastFour} onChange={e => setLastFour(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="1234" maxLength={4} style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 8, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", cursor: "pointer" }}>
               <input type="checkbox" checked={isVirtual} onChange={e => setIsVirtual(e.target.checked)} /> Use a virtual card
             </label>
-            <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "8px 0 0" }}>🔒 This is a simulation — no real card data is stored</p>
-            <button onClick={() => { onSaveCard({ nickname, card_type: "visa", is_virtual: isVirtual }); setStep("confirm"); }}
+
+            <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "8px 0 0" }}>🔒 All data stored locally on your device only — no real charges</p>
+            <button onClick={() => {
+              onSavePersonalInfo({ name, email });
+              onSaveAddress({ address_line: addressLine, city, state: addrState, zip });
+              onSaveCard({ nickname, card_type: "visa", is_virtual: isVirtual, last_four: lastFour });
+              setStep("confirm");
+            }}
               style={{ width: "100%", marginTop: 16, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}>Save & Continue</button>
           </>
         ) : (
@@ -321,36 +414,165 @@ function BuyModal({ product, savedCard, onConfirm, onClose, onSaveCard }: {
   );
 }
 
+// ── Edit Details Modal ─────────────────────────────────
+function EditDetailsModal({ personalInfo, shippingAddress, savedCard, onSave, onClose }: {
+  personalInfo: PersonalInfo; shippingAddress: ShippingAddress; savedCard: SavedCardDetails | null;
+  onSave: (info: PersonalInfo, addr: ShippingAddress, card: SavedCardDetails | null) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(personalInfo.name);
+  const [email, setEmail] = useState(personalInfo.email);
+  const [addressLine, setAddressLine] = useState(shippingAddress.address_line);
+  const [city, setCity] = useState(shippingAddress.city);
+  const [addrState, setAddrState] = useState(shippingAddress.state);
+  const [zip, setZip] = useState(shippingAddress.zip);
+  const [cardNickname, setCardNickname] = useState(savedCard?.nickname || "");
+  const [lastFour, setLastFour] = useState(savedCard?.last_four || "");
+  const [isVirtual, setIsVirtual] = useState(savedCard?.is_virtual || false);
+  const inputStyle = { width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 8, fontSize: 14, boxSizing: "border-box" as const, background: "var(--bg-input)", color: "var(--text-primary)" };
+
+  return (
+    <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
+      style={{ background: "var(--bg-surface)", borderRadius: 16, padding: 24, maxWidth: 420, width: "90%", maxHeight: "85vh", overflowY: "auto" }}>
+      <h3 style={{ margin: "0 0 4px", color: "var(--text-primary)" }}>Edit Your Details</h3>
+      <p style={{ color: "var(--text-muted)", fontSize: 13, margin: "0 0 16px" }}>All data is stored locally on your device</p>
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Personal Info</div>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Full Name</label>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Alex Johnson" style={inputStyle} />
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Email</label>
+      <input value={email} onChange={e => setEmail(e.target.value)} placeholder="alex@example.com" type="email" style={inputStyle} />
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "4px 0 6px" }}>Shipping Address</div>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Address</label>
+      <input value={addressLine} onChange={e => setAddressLine(e.target.value)} placeholder="5032 Forbes Ave" style={inputStyle} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 2 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>City</label>
+          <input value={city} onChange={e => setCity(e.target.value)} placeholder="Pittsburgh" style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>State</label>
+          <input value={addrState} onChange={e => setAddrState(e.target.value)} placeholder="PA" style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>ZIP</label>
+          <input value={zip} onChange={e => setZip(e.target.value)} placeholder="15213" style={inputStyle} />
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "4px 0 6px" }}>Payment Card</div>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Card Nickname</label>
+      <input value={cardNickname} onChange={e => setCardNickname(e.target.value)} placeholder="Visa ending in 1234" style={inputStyle} />
+      <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Last 4 Digits</label>
+      <input value={lastFour} onChange={e => setLastFour(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="1234" maxLength={4} style={inputStyle} />
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", cursor: "pointer" }}>
+        <input type="checkbox" checked={isVirtual} onChange={e => setIsVirtual(e.target.checked)} /> Use a virtual card
+      </label>
+
+      <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "8px 0 0" }}>🔒 Stored locally only — never sent to any server</p>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: 500, background: "var(--bg-btn-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-default)", borderRadius: 8, cursor: "pointer" }}>Cancel</button>
+        <button onClick={() => {
+          onSave(
+            { name, email },
+            { address_line: addressLine, city, state: addrState, zip },
+            cardNickname ? { nickname: cardNickname, card_type: "visa", is_virtual: isVirtual, last_four: lastFour } : null,
+          );
+        }} style={{ flex: 2, padding: "10px 0", fontSize: 13, fontWeight: 600, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, cursor: "pointer" }}>Save Details</button>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Main App ───────────────────────────────────────────
 export default function CliqApp() {
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [products, setProducts] = useState<UIProduct[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    try {
+      const saved = localStorage.getItem("cliq_messages");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [products, setProducts] = useState<UIProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem("cliq_products");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [buyTarget, setBuyTarget] = useState<UIProduct | null>(null);
   const [tab, setTab] = useState("products");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(() => {
+    try {
+      return localStorage.getItem("cliq_has_searched") === "true";
+    } catch { return false; }
+  });
   const [profile, setProfile] = useState<UserProfile>(() => {
-    const defaults = { id: "default_user", price_sensitivity: "balanced", shipping_preference: "normal", preferred_brands: [], saved_card: null, purchase_history: [], watchlist: [] };
+    const defaults: UserProfile = {
+      id: "default_user", price_sensitivity: "balanced", shipping_preference: "normal",
+      preferred_brands: [], saved_card: null,
+      personal_info: { name: "", email: "" },
+      shipping_address: { address_line: "", city: "", state: "", zip: "" },
+      purchase_history: [], watchlist: [], search_history: [],
+    };
     try {
       const saved = localStorage.getItem("cliq_profile_v2");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (!["fastest", "normal", "cheapest"].includes(parsed.shipping_preference)) parsed.shipping_preference = "normal";
         if (!["budget", "balanced", "premium"].includes(parsed.price_sensitivity)) parsed.price_sensitivity = "balanced";
-        return { ...defaults, ...parsed };
+        return {
+          ...defaults, ...parsed,
+          personal_info: { ...defaults.personal_info, ...(parsed.personal_info || {}) },
+          shipping_address: { ...defaults.shipping_address, ...(parsed.shipping_address || {}) },
+          search_history: parsed.search_history || [],
+          watchlist: (parsed.watchlist || []).map((w: WatchlistItem) => ({
+            product_id: w.product_id, product_title: w.product_title,
+            current_price: w.current_price, target_price: w.target_price ?? null,
+            added_at: w.added_at || new Date().toISOString(),
+            price_history: w.price_history || [{ price: w.current_price, date: new Date().toISOString() }],
+            brand: w.brand || "", category: w.category || "", source: w.source || "",
+            url: w.url || "", shipping_eta: w.shipping_eta || "",
+          })),
+        };
       }
     } catch { /* ignore corrupted localStorage */ }
     return defaults;
   });
   const msgEnd = useRef<HTMLDivElement>(null);
-  const idRef = useRef(0);
-  const mkId = () => `m${++idRef.current}`;
+  const idRef = useRef((() => {
+    try {
+      const saved = localStorage.getItem("cliq_msg_id_counter");
+      return saved ? parseInt(saved, 10) : 0;
+    } catch { return 0; }
+  })());
+  const mkId = () => {
+    const next = idRef.current + 1;
+    idRef.current = next;
+    localStorage.setItem("cliq_msg_id_counter", String(next));
+    return `m${next}`;
+  };
 
   // Persist profile
   useEffect(() => {
     localStorage.setItem("cliq_profile_v2", JSON.stringify(profile));
   }, [profile]);
+
+  // Persist messages
+  useEffect(() => {
+    localStorage.setItem("cliq_messages", JSON.stringify(messages));
+  }, [messages]);
+
+  // Persist products
+  useEffect(() => {
+    localStorage.setItem("cliq_products", JSON.stringify(products));
+  }, [products]);
+
+  // Persist search state
+  useEffect(() => {
+    localStorage.setItem("cliq_has_searched", String(hasSearched));
+  }, [hasSearched]);
 
   useEffect(() => { msgEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
@@ -367,12 +589,39 @@ export default function CliqApp() {
       const history = messages.filter(m => m.role !== "follow_up").slice(-8).map(m => ({ role: m.role, text: m.text }));
       const result = await searchBackend(text, profile, history);
 
+      // Record search in history
+      setProfile(prev => ({
+        ...prev,
+        search_history: [
+          { query: text, timestamp: new Date().toISOString(), result_count: result.products.length },
+          ...prev.search_history,
+        ].slice(0, 50), // keep last 50 searches
+      }));
+
       if (result.ambiguous && result.follow_up_question) {
         setMessages(p => [...p, { id: mkId(), role: "follow_up", text: result.follow_up_question!, options: result.follow_up_options, products: [] }]);
       } else {
         setProducts(result.products);
         setTab("products");
         setMessages(p => [...p, { id: mkId(), role: "agent", text: result.summary, options: [], products: result.products }]);
+
+        // Update prices for any tracked products
+        result.products.forEach((rp: UIProduct) => {
+          setProfile(prev => {
+            const tracked = prev.watchlist.find(w => w.product_id === rp.id);
+            if (tracked && tracked.current_price !== rp.price) {
+              return {
+                ...prev,
+                watchlist: prev.watchlist.map(w =>
+                  w.product_id === rp.id
+                    ? { ...w, current_price: rp.price, price_history: [...w.price_history, { price: rp.price, date: new Date().toISOString() }] }
+                    : w
+                ),
+              };
+            }
+            return prev;
+          });
+        });
       }
     } catch {
       setMessages(p => [...p, { id: mkId(), role: "agent", text: "Something went wrong. Please try again.", options: [], products: [] }]);
@@ -382,13 +631,35 @@ export default function CliqApp() {
 
   const handleBuy = (product: UIProduct) => setBuyTarget(product);
   const handleWatch = (product: UIProduct) => {
-    setProfile(p => {
-      if (p.watchlist.some(w => w.product_id === product.id)) return p;
-      return { ...p, watchlist: [...p.watchlist, { product_id: product.id, product_title: product.title, current_price: product.price, target_price: null }] };
-    });
-    if (profile.watchlist.some(w => w.product_id === product.id)) {
-      setMessages(p => [...p, { id: mkId(), role: "agent", text: `"${product.title}" is already on your watchlist.`, options: [], products: [] }]);
+    const existing = profile.watchlist.find(w => w.product_id === product.id);
+    if (existing) {
+      // Update price tracking if price changed
+      if (existing.current_price !== product.price) {
+        setProfile(p => ({
+          ...p,
+          watchlist: p.watchlist.map(w =>
+            w.product_id === product.id
+              ? { ...w, current_price: product.price, price_history: [...w.price_history, { price: product.price, date: new Date().toISOString() }] }
+              : w
+          ),
+        }));
+        setMessages(p => [...p, { id: mkId(), role: "agent", text: `Price updated for "${product.title}": $${existing.current_price.toFixed(2)} → $${product.price.toFixed(2)}`, options: [], products: [] }]);
+      } else {
+        setMessages(p => [...p, { id: mkId(), role: "agent", text: `"${product.title}" is already on your watchlist.`, options: [], products: [] }]);
+      }
     } else {
+      setProfile(p => ({
+        ...p,
+        watchlist: [...p.watchlist, {
+          product_id: product.id, product_title: product.title,
+          current_price: product.price, target_price: null,
+          added_at: new Date().toISOString(),
+          price_history: [{ price: product.price, date: new Date().toISOString() }],
+          brand: product.brand, category: product.category,
+          source: product.source, url: product.url,
+          shipping_eta: product.shipping_eta,
+        }],
+      }));
       setMessages(p => [...p, { id: mkId(), role: "agent", text: `Added "${product.title}" to your watchlist. I'll keep an eye on the price for you.`, options: [], products: [] }]);
     }
   };
@@ -398,6 +669,8 @@ export default function CliqApp() {
     setMessages(p => [...p, { id: mkId(), role: "agent", text: `Order placed for ${product.title} at $${product.price.toFixed(2)}! 🎉 (Simulated — no real charge)`, options: [], products: [] }]);
   };
   const saveCard = (card: NonNullable<UserProfile["saved_card"]>) => setProfile(p => ({ ...p, saved_card: card }));
+  const savePersonalInfo = (info: PersonalInfo) => setProfile(p => ({ ...p, personal_info: info }));
+  const saveAddress = (addr: ShippingAddress) => setProfile(p => ({ ...p, shipping_address: addr }));
   const totalSpent = profile.purchase_history.reduce((s, p) => s + p.price, 0);
   const byCat: Record<string, number> = {};
   profile.purchase_history.forEach(p => { byCat[p.category || "other"] = (byCat[p.category || "other"] || 0) + p.price; });
@@ -458,7 +731,7 @@ export default function CliqApp() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); setInput(""); } }}
-                placeholder='Describe what you\'re looking for...'
+                placeholder="Describe what you're looking for..."
                 autoFocus
                 style={{
                   flex: 1, border: "none", outline: "none", fontSize: 16, background: "transparent",
@@ -525,7 +798,7 @@ export default function CliqApp() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => { setHasSearched(false); setProducts([]); setMessages([]); setInput(""); }}
+            onClick={() => { setHasSearched(false); setProducts([]); setMessages([]); setInput(""); localStorage.removeItem("cliq_has_searched"); localStorage.removeItem("cliq_messages"); localStorage.removeItem("cliq_products"); localStorage.removeItem("cliq_msg_id_counter"); }}
             style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: 0 }}
           >
             <span style={{ fontSize: 22 }}>🛒</span>
@@ -641,7 +914,7 @@ export default function CliqApp() {
           style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
         >
           <div style={{ display: "flex", borderBottom: "1px solid var(--border-default)", background: "var(--bg-surface)", flexShrink: 0, transition: "background 0.2s, border-color 0.2s" }}>
-            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Spending"], ["watchlist", `Watchlist (${profile.watchlist.length})`]] as const).map(([k, label]) => (
+            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Spending"], ["watchlist", `Watchlist (${profile.watchlist.length})`], ["searches", `Searches (${profile.search_history.length})`]] as const).map(([k, label]) => (
               <button key={k} onClick={() => setTab(k)}
                 style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: tab === k ? 600 : 400, color: tab === k ? "var(--text-accent)" : "var(--text-muted)", background: "none", border: "none", borderBottom: tab === k ? "2px solid var(--text-accent)" : "2px solid transparent", cursor: "pointer" }}>
                 {label}
@@ -707,6 +980,27 @@ export default function CliqApp() {
                       ))}
                     </div>
                   )}
+                  {/* Saved Personal Info */}
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Saved Info</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {[
+                        ["Name", profile.personal_info.name],
+                        ["Email", profile.personal_info.email],
+                        ["Address", [profile.shipping_address.address_line, profile.shipping_address.city, profile.shipping_address.state, profile.shipping_address.zip].filter(Boolean).join(", ")],
+                        ["Card", profile.saved_card ? `${profile.saved_card.nickname} (****${profile.saved_card.last_four})` : null],
+                      ].map(([label, value]) => (
+                        <div key={label as string} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0" }}>
+                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+                          <span style={{ color: value ? "var(--text-primary)" : "var(--text-faint)", fontWeight: value ? 500 : 400 }}>{(value as string) || "Not set"}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setBuyTarget({ id: "__edit__", title: "Edit Info", brand: "", price: 0, original_price: null, shipping_eta: "", rating: 0, reviews: 0, tag: "", explanation: "", source: "", url: "", category: "", coupons: 0, specs: {} })}
+                      style={{ width: "100%", marginTop: 10, padding: "8px 0", fontSize: 12, fontWeight: 600, background: "var(--bg-btn-secondary)", color: "var(--text-accent)", border: "1px solid var(--border-default)", borderRadius: 8, cursor: "pointer" }}>
+                      Edit Details
+                    </button>
+                  </div>
                   <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Your Preferences</div>
                     {([["Price Sensitivity", "price_sensitivity", ["budget", "balanced", "premium"]], ["Shipping", "shipping_preference", ["fastest", "normal", "cheapest"]]] as const).map(([label, key, opts]) => (
@@ -736,16 +1030,98 @@ export default function CliqApp() {
                       <p>No items on your watchlist. Click the 👁️ button on any product to watch it.</p>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {profile.watchlist.map((w, i) => (
-                        <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s, border-color 0.2s" }}>
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{w.product_title}</div>
-                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Current: ${w.current_price.toFixed(2)}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {profile.watchlist.map((w, i) => {
+                        const firstPrice = w.price_history?.[0]?.price ?? w.current_price;
+                        const priceDiff = w.current_price - firstPrice;
+                        const pctChange = firstPrice > 0 ? ((priceDiff / firstPrice) * 100) : 0;
+                        return (
+                          <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, transition: "background 0.2s, border-color 0.2s" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{w.product_title}</div>
+                                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                                  {w.brand && <span>{w.brand} · </span>}
+                                  {w.source && <span>{w.source} · </span>}
+                                  {getCategoryEmoji(w.category || "")} {(w.category || "").replace(/_/g, " ")}
+                                </div>
+                              </div>
+                              <button onClick={() => setProfile(p => ({ ...p, watchlist: p.watchlist.filter((_, j) => j !== i) }))}
+                                style={{ fontSize: 12, color: "var(--text-danger)", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Remove</button>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 8 }}>
+                              <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>${w.current_price.toFixed(2)}</span>
+                              {priceDiff !== 0 && (
+                                <span style={{ fontSize: 12, fontWeight: 600, color: priceDiff < 0 ? "#10b981" : "#ef4444" }}>
+                                  {priceDiff < 0 ? "▼" : "▲"} ${Math.abs(priceDiff).toFixed(2)} ({Math.abs(pctChange).toFixed(1)}%)
+                                </span>
+                              )}
+                            </div>
+                            {w.shipping_eta && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>📦 {w.shipping_eta}</div>}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                                Tracking since {new Date(w.added_at).toLocaleDateString()} · {w.price_history?.length || 1} price point{(w.price_history?.length || 1) !== 1 ? "s" : ""}
+                              </span>
+                              {w.url && (
+                                <button onClick={() => window.open(w.url, "_blank")}
+                                  style={{ fontSize: 11, color: "var(--text-accent)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>View</button>
+                              )}
+                            </div>
+                            {/* Mini price history */}
+                            {w.price_history && w.price_history.length > 1 && (
+                              <div style={{ marginTop: 8, display: "flex", gap: 4, alignItems: "flex-end", height: 24 }}>
+                                {w.price_history.map((ph, j) => {
+                                  const prices = w.price_history.map(p => p.price);
+                                  const min = Math.min(...prices);
+                                  const max = Math.max(...prices);
+                                  const range = max - min || 1;
+                                  const height = Math.max(4, ((ph.price - min) / range) * 20);
+                                  return (
+                                    <div key={j} title={`$${ph.price.toFixed(2)} on ${new Date(ph.date).toLocaleDateString()}`}
+                                      style={{ flex: 1, height, background: ph.price <= firstPrice ? "#10b981" : "#ef4444", borderRadius: 2, minWidth: 3, maxWidth: 16 }} />
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <button onClick={() => setProfile(p => ({ ...p, watchlist: p.watchlist.filter((_, j) => j !== i) }))}
-                            style={{ fontSize: 12, color: "var(--text-danger)", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
-                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+              {tab === "searches" && (
+                <motion.div key="srch" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  {profile.search_history.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
+                      <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
+                      <p>Your search history will appear here.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>Recent Searches</span>
+                        <button onClick={() => setProfile(p => ({ ...p, search_history: [] }))}
+                          style={{ fontSize: 11, color: "var(--text-danger)", background: "none", border: "none", cursor: "pointer" }}>Clear All</button>
+                      </div>
+                      {profile.search_history.map((s, i) => (
+                        <motion.div key={i} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }}
+                          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.2s, border-color 0.2s" }}
+                          onClick={() => send(s.query)}
+                          whileHover={{ x: 2 }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 14, color: "var(--text-muted)" }}>🔍</span>
+                            <div>
+                              <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 500 }}>{s.query}</div>
+                              <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                                {new Date(s.timestamp).toLocaleDateString()} {new Date(s.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                {s.result_count > 0 && <span> · {s.result_count} results</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Re-search</span>
+                        </motion.div>
                       ))}
                     </div>
                   )}
@@ -756,11 +1132,30 @@ export default function CliqApp() {
         </motion.div>
       </div>
 
-      {/* Buy Modal */}
+      {/* Buy Modal / Edit Details Modal */}
       <AnimatePresence>
-        {buyTarget && (
+        {buyTarget && buyTarget.id === "__edit__" ? (
+          <motion.div key="edit-modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: "fixed", inset: 0, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}
+            onClick={() => setBuyTarget(null)}>
+            <EditDetailsModal
+              personalInfo={profile.personal_info}
+              shippingAddress={profile.shipping_address}
+              savedCard={profile.saved_card}
+              onSave={(info, addr, card) => {
+                savePersonalInfo(info);
+                saveAddress(addr);
+                if (card) saveCard(card);
+                setBuyTarget(null);
+              }}
+              onClose={() => setBuyTarget(null)}
+            />
+          </motion.div>
+        ) : buyTarget && (
           <BuyModal product={buyTarget} savedCard={profile.saved_card}
-            onConfirm={handlePurchaseConfirm} onClose={() => setBuyTarget(null)} onSaveCard={saveCard} />
+            personalInfo={profile.personal_info} shippingAddress={profile.shipping_address}
+            onConfirm={handlePurchaseConfirm} onClose={() => setBuyTarget(null)}
+            onSaveCard={saveCard} onSavePersonalInfo={savePersonalInfo} onSaveAddress={saveAddress} />
         )}
       </AnimatePresence>
     </div>
