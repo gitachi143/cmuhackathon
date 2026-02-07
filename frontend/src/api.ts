@@ -1,4 +1,14 @@
-import type { SearchResponse, UserProfile, PurchaseRecord, SpendingOverview } from './types';
+import type {
+  SearchResponse,
+  UserProfile,
+  PurchaseRecord,
+  SpendingOverview,
+  SpendingAnalytics,
+  SpendingHabits,
+  PriceDropsResponse,
+  NessieAccountsResponse,
+  NessiePurchasesResponse,
+} from './types';
 
 const API_BASE = '/api';
 
@@ -54,5 +64,52 @@ export async function getCoupons(
 ): Promise<{ product_id: string; coupons: { code: string; discount: string; source: string }[] }> {
   const res = await fetch(`${API_BASE}/coupons/${productId}`);
   if (!res.ok) throw new Error('Failed to get coupons');
+  return res.json();
+}
+
+// ─── Enhanced Analytics API ──────────────────────────────
+
+export async function getSpendingAnalytics(): Promise<SpendingAnalytics> {
+  const res = await fetch(`${API_BASE}/spending/analytics`);
+  if (!res.ok) throw new Error('Failed to get spending analytics');
+  return res.json();
+}
+
+export async function getSpendingHabits(): Promise<SpendingHabits> {
+  const res = await fetch(`${API_BASE}/spending/habits`);
+  if (!res.ok) throw new Error('Failed to get spending habits');
+  return res.json();
+}
+
+export async function getPriceDrops(): Promise<PriceDropsResponse> {
+  const res = await fetch(`${API_BASE}/price-drops`);
+  if (!res.ok) throw new Error('Failed to get price drops');
+  return res.json();
+}
+
+// ─── Capital One Nessie API ─────────────────────────────
+
+export async function getNessieAccounts(): Promise<NessieAccountsResponse> {
+  const res = await fetch(`${API_BASE}/nessie/accounts`);
+  if (!res.ok) throw new Error('Failed to get Nessie accounts');
+  return res.json();
+}
+
+export async function getNessiePurchases(accountId?: string): Promise<NessiePurchasesResponse> {
+  const url = accountId
+    ? `${API_BASE}/nessie/purchases?account_id=${accountId}`
+    : `${API_BASE}/nessie/purchases`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to get Nessie purchases');
+  return res.json();
+}
+
+export async function getNessieMerchants(): Promise<{
+  merchants: { id: string; name: string; category: string[] }[];
+  count: number;
+  connected: boolean;
+}> {
+  const res = await fetch(`${API_BASE}/nessie/merchants`);
+  if (!res.ok) throw new Error('Failed to get Nessie merchants');
   return res.json();
 }

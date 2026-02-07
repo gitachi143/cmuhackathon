@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import os
 from dotenv import load_dotenv
 
@@ -16,6 +16,14 @@ from models import (
     WatchlistItem,
 )
 from ai_service import interpret_query_with_gemini
+from nessie_service import (
+    get_accounts,
+    get_purchases as nessie_get_purchases,
+    get_merchants,
+    compute_spending_analytics,
+    compute_spending_habits,
+    detect_price_drops,
+)
 
 app = FastAPI(title="Cliq — AI Shopping Agent", version="1.0.0")
 
@@ -54,6 +62,12 @@ async def root():
             "watchlist": "GET|POST|DELETE /api/watchlist",
             "coupons": "GET /api/coupons/{product_id}",
             "spending": "GET /api/spending",
+            "spending_analytics": "GET /api/spending/analytics",
+            "spending_habits": "GET /api/spending/habits",
+            "price_drops": "GET /api/price-drops",
+            "nessie_accounts": "GET /api/nessie/accounts",
+            "nessie_purchases": "GET /api/nessie/purchases",
+            "nessie_merchants": "GET /api/nessie/merchants",
         },
     }
 
@@ -167,4 +181,118 @@ async def get_spending():
         "purchase_count": len(purchase_history),
         "by_category": {k: round(v, 2) for k, v in by_category.items()},
         "watchlist_count": len(watchlist),
+    }
+
+
+# ─── Enhanced Spending Analytics ──────────────────────────
+
+
+@app.get("/api/spending/analytics")
+async def spending_analytics():
+    """
+    Deep spending analytics combining in-app purchases and
+    Capital One Nessie bank transaction data.
+    """
+    # Get bank transactions from Nessie (or mock)
+    bank_purchases = await nessie_get_purchases()
+
+    # Combine with in-app purchases
+    app_purchases = [
+        {
+            "id": p.product_id,
+            "merchant_name": p.brand,
+            "category": p.category.replace("_", " ").title(),
+            "purchase_date": p.timestamp[:10] if "T" in p.timestamp else p.timestamp,
+            "amount": p.price,
+            "status": "completed",
+            "description": p.product_name,
+        }
+        for p in purchase_history
+    ]
+
+    all_purchases = bank_purchases + app_purchases
+    analytics = compute_spending_analytics(all_purchases)
+    analytics["source"] = {
+        "bank_transactions": len(bank_purchases),
+        "app_purchases": len(app_purchases),
+        "nessie_connected": bool(os.getenv("NESSIE_API_KEY")),
+    }
+    return analytics
+
+
+@app.get("/api/spending/habits")
+async def spending_habits():
+    """
+    Analyze spending habits, patterns, and provide smart insights.
+    """
+    bank_purchases = await nessie_get_purchases()
+    app_purchases = [
+        {
+            "id": p.product_id,
+            "merchant_name": p.brand,
+            "category": p.category.replace("_", " ").title(),
+            "purchase_date": p.timestamp[:10] if "T" in p.timestamp else p.timestamp,
+            "amount": p.price,
+            "status": "completed",
+            "description": p.product_name,
+        }
+        for p in purchase_history
+    ]
+    all_purchases = bank_purchases + app_purchases
+    return compute_spending_habits(all_purchases)
+
+
+@app.get("/api/price-drops")
+async def price_drops():
+    """
+    Detect price drops for watchlist items and return alerts.
+    """
+    watchlist_data = [w.model_dump() for w in watchlist]
+    drops = detect_price_drops(watchlist_data)
+    return {
+        "drops": drops,
+        "total_potential_savings": round(sum(d["drop_amount"] for d in drops), 2),
+        "items_with_drops": len(drops),
+        "watchlist_size": len(watchlist),
+    }
+
+
+# ─── Capital One Nessie API Endpoints ─────────────────────
+
+
+@app.get("/api/nessie/accounts")
+async def nessie_accounts():
+    """Get Capital One bank accounts via Nessie API."""
+    accounts = await get_accounts()
+    total_balance = sum(a.get("balance", 0) for a in accounts)
+    total_rewards = sum(a.get("rewards", 0) for a in accounts)
+    return {
+        "accounts": accounts,
+        "total_balance": round(total_balance, 2),
+        "total_rewards": total_rewards,
+        "connected": bool(os.getenv("NESSIE_API_KEY")),
+    }
+
+
+@app.get("/api/nessie/purchases")
+async def nessie_purchases(account_id: Optional[str] = None):
+    """Get purchase/transaction history from Capital One via Nessie API."""
+    purchases = await nessie_get_purchases(account_id)
+    total = sum(p.get("amount", 0) for p in purchases)
+    return {
+        "purchases": purchases,
+        "total": round(total, 2),
+        "count": len(purchases),
+        "connected": bool(os.getenv("NESSIE_API_KEY")),
+    }
+
+
+@app.get("/api/nessie/merchants")
+async def nessie_merchants_endpoint():
+    """Get merchant data from Capital One via Nessie API."""
+    merchants_list = await get_merchants()
+    return {
+        "merchants": merchants_list,
+        "count": len(merchants_list),
+        "connected": bool(os.getenv("NESSIE_API_KEY")),
     }
