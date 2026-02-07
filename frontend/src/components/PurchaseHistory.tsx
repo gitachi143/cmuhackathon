@@ -64,7 +64,7 @@ export default function PurchaseHistory({ onClose }: Props) {
                   key={cat}
                   className="text-xs bg-white/20 text-white px-2 py-1 rounded-full font-medium"
                 >
-                  {cat.replace('_', ' ')}: ${amount.toFixed(2)}
+                  {cat.replaceAll('_', ' ')}: ${amount.toFixed(2)}
                 </span>
               ))}
             </div>

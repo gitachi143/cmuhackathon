@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { UserProfile, PurchaseRecord, SavedCard } from '../types';
 
 interface UserProfileContextType {
