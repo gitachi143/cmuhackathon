@@ -46,6 +46,14 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
+async def close_client() -> None:
+    """Close the shared HTTP client. Call on app shutdown."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
 def _extract_image_from_html(html: str, base_url: str) -> Optional[str]:
     """Extract the best product image URL from raw HTML using regex.
 
@@ -55,14 +63,14 @@ def _extract_image_from_html(html: str, base_url: str) -> Optional[str]:
 
     # 1. Open Graph image (most reliable for product pages)
     og_match = re.search(
-        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+property\s*=\s*["\']og:image["\'][^>]+content\s*=\s*["\']([^"\']+)["\']',
         html,
         re.IGNORECASE,
     )
     if not og_match:
         # Some sites put content before property
         og_match = re.search(
-            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+            r'<meta[^>]+content\s*=\s*["\']([^"\']+)["\'][^>]+property\s*=\s*["\']og:image["\']',
             html,
             re.IGNORECASE,
         )
@@ -73,13 +81,13 @@ def _extract_image_from_html(html: str, base_url: str) -> Optional[str]:
 
     # 2. Twitter card image
     tw_match = re.search(
-        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+name\s*=\s*["\']twitter:image["\'][^>]+content\s*=\s*["\']([^"\']+)["\']',
         html,
         re.IGNORECASE,
     )
     if not tw_match:
         tw_match = re.search(
-            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']',
+            r'<meta[^>]+content\s*=\s*["\']([^"\']+)["\'][^>]+name\s*=\s*["\']twitter:image["\']',
             html,
             re.IGNORECASE,
         )
@@ -100,14 +108,14 @@ def _extract_image_from_html(html: str, base_url: str) -> Optional[str]:
 
     # 4. Large product images – look for img tags with product-related class/id
     product_img = re.search(
-        r'<img[^>]+(?:class|id)=["\'][^"\']*(?:product|hero|main|primary|featured)[^"\']*["\'][^>]+src=["\']([^"\']+)["\']',
+        r'<img[^>]+(?:class|id)\s*=\s*["\'][^"\']*(?:product|hero|main|primary|featured)[^"\']*["\'][^>]+src\s*=\s*["\']([^"\']+)["\']',
         html,
         re.IGNORECASE,
     )
     if not product_img:
         # Try reversed attribute order
         product_img = re.search(
-            r'<img[^>]+src=["\']([^"\']+)["\'][^>]+(?:class|id)=["\'][^"\']*(?:product|hero|main|primary|featured)[^"\']*["\']',
+            r'<img[^>]+src\s*=\s*["\']([^"\']+)["\'][^>]+(?:class|id)\s*=\s*["\'][^"\']*(?:product|hero|main|primary|featured)[^"\']*["\']',
             html,
             re.IGNORECASE,
         )

@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import asyncio
 
 from tracking_service import update_activity, watchlist_tracking_loop, purchase_tracking_loop
+from scraper import close_client as close_scraper_client
 from storage import watchlist, purchase_history, update_watchlist_price
 from routers import (
     search_router,
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     yield
     wl_task.cancel()
     pl_task.cancel()
+    await close_scraper_client()
 
 
 app = FastAPI(title="Cliq — AI Shopping Agent", version="2.0.0", lifespan=lifespan)

@@ -5,7 +5,7 @@ import { getCategoryEmoji } from "../../utils";
 import { useTagColors } from "../../hooks";
 import { Stars } from "../common/Stars";
 
-function ProductImage({ src, category, tagBg }: { src: string | null; category: string; tagBg: string }) {
+function ProductImage({ src, alt, category, tagBg }: { src: string | null; alt: string; category: string; tagBg: string }) {
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
@@ -37,7 +37,7 @@ function ProductImage({ src, category, tagBg }: { src: string | null; category: 
     >
       <img
         src={src}
-        alt=""
+        alt={alt}
         onError={() => setFailed(true)}
         style={{
           width: "100%",
@@ -102,7 +102,7 @@ export function ProductCard({ product: p, onBuy, onWatch }: ProductCardProps) {
         )}
       </div>
 
-      <ProductImage src={p.image_url} category={p.category} tagBg={tc.bg} />
+      <ProductImage src={p.image_url} alt={p.title} category={p.category} tagBg={tc.bg} />
 
       <div>
         <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.3 }}>{p.title}</div>
