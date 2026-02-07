@@ -95,7 +95,7 @@ export default function SpendingOverview({ onClose }: Props) {
                     >
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-semibold text-slate-700 capitalize">
-                          {cat.replace('_', ' ')}
+                          {cat.replaceAll('_', ' ')}
                         </span>
                         <span className="text-slate-500 font-medium">
                           ${data.amount.toFixed(2)} ({data.count})

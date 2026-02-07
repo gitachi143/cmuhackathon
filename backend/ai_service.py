@@ -125,7 +125,10 @@ User query: "{request.query}"
             temperature=0.7,
         )
 
-        response_text = response.choices[0].message.content.strip()
+        raw_content = response.choices[0].message.content
+        if not raw_content:
+            return generate_mock_response(request)
+        response_text = raw_content.strip()
 
         # Clean up the response - remove markdown code blocks if present
         if response_text.startswith("```"):

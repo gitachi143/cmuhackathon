@@ -282,7 +282,7 @@ export default function CliqApp() {
         if (!["budget", "balanced", "premium"].includes(parsed.price_sensitivity)) parsed.price_sensitivity = "balanced";
         return { ...defaults, ...parsed };
       }
-    } catch {}
+    } catch { /* ignore corrupted localStorage */ }
     return defaults;
   });
   const msgEnd = useRef<HTMLDivElement>(null);
@@ -320,8 +320,15 @@ export default function CliqApp() {
 
   const handleBuy = (product: UIProduct) => setBuyTarget(product);
   const handleWatch = (product: UIProduct) => {
-    setProfile(p => ({ ...p, watchlist: [...p.watchlist, { product_id: product.id, product_title: product.title, current_price: product.price, target_price: null }] }));
-    setMessages(p => [...p, { id: mkId(), role: "agent", text: `Added "${product.title}" to your watchlist. I'll keep an eye on the price for you.`, options: [], products: [] }]);
+    setProfile(p => {
+      if (p.watchlist.some(w => w.product_id === product.id)) return p;
+      return { ...p, watchlist: [...p.watchlist, { product_id: product.id, product_title: product.title, current_price: product.price, target_price: null }] };
+    });
+    if (profile.watchlist.some(w => w.product_id === product.id)) {
+      setMessages(p => [...p, { id: mkId(), role: "agent", text: `"${product.title}" is already on your watchlist.`, options: [], products: [] }]);
+    } else {
+      setMessages(p => [...p, { id: mkId(), role: "agent", text: `Added "${product.title}" to your watchlist. I'll keep an eye on the price for you.`, options: [], products: [] }]);
+    }
   };
   const handlePurchaseConfirm = (product: UIProduct, cardName: string) => {
     recordPurchase(product, cardName);
@@ -495,12 +502,15 @@ export default function CliqApp() {
                       <div key={key} style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{label}</div>
                         <div style={{ display: "flex", gap: 4 }}>
-                          {opts.map(o => (
-                            <button key={o} onClick={() => setProfile(p => ({ ...p, [key]: o }))}
-                              style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: (profile as any)[key] === o ? 600 : 400, background: (profile as any)[key] === o ? "#eff6ff" : "#f9fafb", color: (profile as any)[key] === o ? "#2563eb" : "#6b7280", border: (profile as any)[key] === o ? "1px solid #bfdbfe" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
-                              {o}
-                            </button>
-                          ))}
+                          {opts.map(o => {
+                            const isActive = profile[key] === o;
+                            return (
+                              <button key={o} onClick={() => setProfile(p => ({ ...p, [key]: o }))}
+                                style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: isActive ? 600 : 400, background: isActive ? "#eff6ff" : "#f9fafb", color: isActive ? "#2563eb" : "#6b7280", border: isActive ? "1px solid #bfdbfe" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
+                                {o}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
