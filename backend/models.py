@@ -107,7 +107,17 @@ class SearchResponse(BaseModel):
     learned_preferences: Optional[LearnedPreferences] = None
 
 
+class ShippingStatus(str, Enum):
+    processing = "processing"
+    confirmed = "confirmed"
+    shipped = "shipped"
+    in_transit = "in_transit"
+    out_for_delivery = "out_for_delivery"
+    delivered = "delivered"
+
+
 class PurchaseRecord(BaseModel):
+    order_id: str
     product_id: str
     product_name: str
     price: float
@@ -115,3 +125,4 @@ class PurchaseRecord(BaseModel):
     category: str
     card_nickname: str
     timestamp: str
+    shipping_status: ShippingStatus = ShippingStatus.processing
