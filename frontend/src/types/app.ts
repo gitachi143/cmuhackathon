@@ -122,12 +122,14 @@ export interface UserProfile {
   shipping_address: ShippingAddress;
   learned: LearnedPreferences;
   purchase_history: {
+    order_id?: string;
     product_id: string;
     product_title: string;
     price: number;
     category: string;
     card_used: string;
     timestamp: string;
+    shipping_status?: string;
   }[];
   watchlist: WatchlistItem[];
   search_history: SearchHistoryEntry[];

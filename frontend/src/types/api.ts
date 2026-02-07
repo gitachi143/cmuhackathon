@@ -66,6 +66,7 @@ export interface ChatMessage {
 }
 
 export interface PurchaseRecord {
+  order_id: string;
   product_id: string;
   product_name: string;
   price: number;
@@ -73,6 +74,19 @@ export interface PurchaseRecord {
   category: string;
   card_nickname: string;
   timestamp: string;
+  shipping_status: string;
+}
+
+export interface ShipmentStatus {
+  order_id: string;
+  product_id: string;
+  product_name: string;
+  shipping_status: string;
+  timestamp: string;
+}
+
+export interface ShippingResponse {
+  shipments: ShipmentStatus[];
 }
 
 export interface SpendingOverview {

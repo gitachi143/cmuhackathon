@@ -242,11 +242,11 @@ export default function CliqApp() {
     }
   };
 
-  const handlePurchaseConfirm = (product: UIProduct, cardName: string) => {
-    recordPurchase(product, cardName);
+  const handlePurchaseConfirm = async (product: UIProduct, cardName: string) => {
+    const { order_id } = await recordPurchase(product, cardName);
     setProfile((p) => ({
       ...p,
-      purchase_history: [...p.purchase_history, { product_id: product.id, product_title: product.title, price: product.price, category: product.category, card_used: cardName, timestamp: new Date().toISOString() }],
+      purchase_history: [...p.purchase_history, { order_id, product_id: product.id, product_title: product.title, price: product.price, category: product.category, card_used: cardName, timestamp: new Date().toISOString(), shipping_status: "processing" }],
     }));
     setMessages((p) => [...p, { id: mkId(), role: "agent", text: `Order placed for ${product.title} at $${product.price.toFixed(2)}! \u{1F389} (Simulated \u2014 no real charge)`, thinking: null, options: [], products: [] }]);
   };
