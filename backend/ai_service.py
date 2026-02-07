@@ -2,32 +2,26 @@ import os
 import json
 from typing import Optional
 
+from openai import AsyncOpenAI
+
 from models import SearchRequest, SearchResponse, Product, ShoppingIntent, FollowUpQuestion
 
 # =============================================
-# GEMINI API INTEGRATION
+# OPENROUTER API INTEGRATION
 # =============================================
-# To use the real Gemini API:
-# 1. pip install google-generativeai
-# 2. Set GEMINI_API_KEY in your .env file
-# 3. The code below will automatically use it
+# Uses the OpenAI-compatible API via OpenRouter
+# Set OPENROUTER_API_KEY in your .env file
 # =============================================
 
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = "google/gemini-2.0-flash-lite-001"
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-
-def get_gemini_model():
-    """Initialize and return the Gemini model, or None if unavailable."""
-    if not GEMINI_AVAILABLE or not GEMINI_API_KEY:
-        return None
-    genai.configure(api_key=GEMINI_API_KEY)
-    return genai.GenerativeModel("gemini-2.0-flash")
+client: Optional[AsyncOpenAI] = None
+if OPENROUTER_API_KEY:
+    client = AsyncOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
 
 
 SYSTEM_PROMPT = """You are Cliq, an expert AI shopping assistant. Your job is to help users find the perfect products based on their natural language descriptions.
@@ -92,17 +86,14 @@ Only return the JSON object. No markdown, no code blocks, no extra text."""
 
 async def interpret_query_with_gemini(request: SearchRequest) -> SearchResponse:
     """
-    Send the user's query to Gemini for interpretation and product recommendations.
-    Falls back to mock data if Gemini is unavailable.
+    Send the user's query to OpenRouter for interpretation and product recommendations.
+    Falls back to mock data if OpenRouter is unavailable.
     """
-    model = get_gemini_model()
-
-    if model is None:
-        # Fallback to mock response
+    if client is None:
         return generate_mock_response(request)
 
     try:
-        # Build the prompt with user context
+        # Build the user message with context
         user_context = ""
         if request.user_profile:
             user_context = f"""
@@ -115,24 +106,30 @@ User preferences:
         conversation_context = ""
         if request.conversation_history:
             conversation_context = "\nPrevious conversation:\n"
-            for msg in request.conversation_history[-6:]:  # Last 6 messages
+            for msg in request.conversation_history[-6:]:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
                 conversation_context += f"- {role}: {content}\n"
 
-        full_prompt = f"""{SYSTEM_PROMPT}
-{user_context}
+        user_message = f"""{user_context}
 {conversation_context}
 User query: "{request.query}"
 """
 
-        response = model.generate_content(full_prompt)
-        response_text = response.text.strip()
+        response = await client.chat.completions.create(
+            model=OPENROUTER_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.7,
+        )
+
+        response_text = response.choices[0].message.content.strip()
 
         # Clean up the response - remove markdown code blocks if present
         if response_text.startswith("```"):
             lines = response_text.split("\n")
-            # Remove first line (```json or ```) and last line (```)
             response_text = "\n".join(lines[1:])
             if response_text.endswith("```"):
                 response_text = response_text[:-3].strip()
@@ -150,12 +147,12 @@ User query: "{request.query}"
             ),
         )
     except Exception as e:
-        print(f"Gemini API error: {e}")
+        print(f"OpenRouter API error: {e}")
         return generate_mock_response(request)
 
 
 def generate_mock_response(request: SearchRequest) -> SearchResponse:
-    """Generate a mock response when Gemini is unavailable."""
+    """Generate a mock response when OpenRouter is unavailable."""
     from mock_data import get_mock_products
 
     query_lower = request.query.lower()
