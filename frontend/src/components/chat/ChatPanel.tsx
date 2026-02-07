@@ -7,6 +7,8 @@ interface ChatPanelProps {
   loading: boolean;
   learned: LearnedPreferences;
   onSend: (text: string) => void;
+  input: string;
+  setInput: (val: string) => void;
 }
 
 /** Renders the "thinking" bubble that shows the AI's reasoning. */
@@ -34,7 +36,7 @@ function ThinkingBubble({ text }: { text: string }) {
   );
 }
 
-export function ChatPanel({ messages, loading, learned, onSend }: ChatPanelProps) {
+export function ChatPanel({ messages, loading, learned, onSend, input, setInput }: ChatPanelProps) {
   const msgEnd = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -159,6 +161,73 @@ export function ChatPanel({ messages, loading, learned, onSend }: ChatPanelProps
           </motion.div>
         )}
         <div ref={msgEnd} />
+      </div>
+
+      {/* Follow-up message input */}
+      <div
+        style={{
+          padding: "10px 16px",
+          borderTop: "1px solid var(--border-default)",
+          background: "var(--bg-surface)",
+          transition: "background 0.2s, border-color 0.2s",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "var(--bg-muted)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 9999,
+            padding: "6px 14px",
+            transition: "background 0.2s, border-color 0.2s",
+          }}
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim()) {
+                  onSend(input);
+                  setInput("");
+                }
+              }
+            }}
+            placeholder="Refine your search..."
+            style={{
+              flex: 1,
+              border: "none",
+              outline: "none",
+              fontSize: 13,
+              background: "transparent",
+              color: "var(--text-primary)",
+            }}
+          />
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              if (input.trim()) {
+                onSend(input);
+                setInput("");
+              }
+            }}
+            disabled={loading || !input.trim()}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+              fontSize: 13,
+              color: loading || !input.trim() ? "var(--text-faint)" : "var(--text-accent)",
+              fontWeight: 600,
+              padding: "2px 6px",
+            }}
+          >
+            Send
+          </motion.button>
+        </div>
       </div>
 
       {/* Smart suggestions - context-aware */}
