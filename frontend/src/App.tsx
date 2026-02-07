@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "./context/ThemeContext";
 
 // ── Types ──────────────────────────────────────────────
 interface BackendProduct {
@@ -100,14 +101,26 @@ function getCategoryEmoji(cat: string): string {
   return "📦";
 }
 
-// ── Tag Colors ─────────────────────────────────────────
-const TAG_COLORS: Record<string, { bg: string; text: string }> = {
-  "Best overall": { bg: "#dbeafe", text: "#1e40af" },
-  "Best value": { bg: "#d1fae5", text: "#065f46" },
-  "Fastest shipping": { bg: "#fef3c7", text: "#92400e" },
-  "Budget pick": { bg: "#e0e7ff", text: "#3730a3" },
-  "Premium pick": { bg: "#fae8ff", text: "#86198f" },
-};
+// ── Tag Colors (theme-aware) ──────────────────────────
+function useTagColors() {
+  const { isDark } = useTheme();
+  if (isDark) {
+    return {
+      "Best overall": { bg: "#1e3a5f", text: "#93c5fd" },
+      "Best value": { bg: "#064e3b", text: "#6ee7b7" },
+      "Fastest shipping": { bg: "#78350f", text: "#fcd34d" },
+      "Budget pick": { bg: "#312e81", text: "#a5b4fc" },
+      "Premium pick": { bg: "#701a75", text: "#f0abfc" },
+    } as Record<string, { bg: string; text: string }>;
+  }
+  return {
+    "Best overall": { bg: "#dbeafe", text: "#1e40af" },
+    "Best value": { bg: "#d1fae5", text: "#065f46" },
+    "Fastest shipping": { bg: "#fef3c7", text: "#92400e" },
+    "Budget pick": { bg: "#e0e7ff", text: "#3730a3" },
+    "Premium pick": { bg: "#fae8ff", text: "#86198f" },
+  } as Record<string, { bg: string; text: string }>;
+}
 
 // ── Star Rating ────────────────────────────────────────
 function Stars({ rating }: { rating: number }) {
@@ -116,71 +129,117 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span style={{ color: "#f59e0b", fontSize: 14, letterSpacing: 1 }}>
       {"★".repeat(full)}{half ? "½" : ""}{"☆".repeat(5 - full - (half ? 1 : 0))}
-      <span style={{ color: "#6b7280", fontSize: 12, marginLeft: 4 }}>{rating}</span>
+      <span style={{ color: "var(--text-muted)", fontSize: 12, marginLeft: 4 }}>{rating}</span>
     </span>
+  );
+}
+
+// ── Theme Toggle Button ───────────────────────────────
+function ThemeToggle() {
+  const { isDark, toggleTheme } = useTheme();
+  return (
+    <motion.button
+      whileTap={{ scale: 0.9 }}
+      whileHover={{ scale: 1.08 }}
+      onClick={toggleTheme}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      style={{
+        position: "relative",
+        width: 44,
+        height: 24,
+        borderRadius: 99,
+        border: "1px solid var(--border-default)",
+        background: isDark ? "#1e3a5f" : "#e0e7ff",
+        cursor: "pointer",
+        padding: 0,
+        display: "flex",
+        alignItems: "center",
+        transition: "background 0.3s ease, border-color 0.3s ease",
+      }}
+    >
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 99,
+          background: isDark ? "#60a5fa" : "#f59e0b",
+          marginLeft: isDark ? 22 : 3,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          boxShadow: isDark ? "0 0 6px rgba(96,165,250,0.5)" : "0 0 6px rgba(245,158,11,0.4)",
+        }}
+      >
+        {isDark ? "🌙" : "☀️"}
+      </motion.div>
+    </motion.button>
   );
 }
 
 // ── Product Card ───────────────────────────────────────
 function ProductCard({ product: p, onBuy, onWatch }: { product: UIProduct; onBuy: (p: UIProduct) => void; onWatch: (p: UIProduct) => void }) {
   const [showLink, setShowLink] = useState(false);
-  const tc = TAG_COLORS[p.tag] || TAG_COLORS["Best overall"];
+  const tagColors = useTagColors();
+  const tc = tagColors[p.tag] || tagColors["Best overall"];
   return (
     <motion.div
       layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2, boxShadow: "0 8px 25px rgba(0,0,0,0.1)" }}
+      whileHover={{ y: -2, boxShadow: "0 8px 25px rgba(0,0,0,0.15)" }}
       transition={{ duration: 0.2 }}
-      style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #e5e7eb", position: "relative", display: "flex", flexDirection: "column", gap: 8 }}
+      style={{ background: "var(--bg-surface)", borderRadius: 12, padding: 16, border: "1px solid var(--border-default)", position: "relative", display: "flex", flexDirection: "column", gap: 8, transition: "background 0.2s, border-color 0.2s" }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ background: tc.bg, color: tc.text, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 99, textTransform: "uppercase", letterSpacing: 0.5 }}>{p.tag}</span>
-        {p.coupons > 0 && <span style={{ fontSize: 11, color: "#059669", fontWeight: 500 }}>🏷️ {p.coupons} coupon{p.coupons > 1 ? "s" : ""}</span>}
+        {p.coupons > 0 && <span style={{ fontSize: 11, color: "var(--text-success)", fontWeight: 500 }}>🏷️ {p.coupons} coupon{p.coupons > 1 ? "s" : ""}</span>}
       </div>
-      <div style={{ background: `linear-gradient(135deg, ${tc.bg}, #f3f4f6)`, borderRadius: 8, height: 80, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+      <div style={{ background: `linear-gradient(135deg, ${tc.bg}, var(--bg-muted))`, borderRadius: 8, height: 80, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
         {getCategoryEmoji(p.category)}
       </div>
       <div>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "#111827", lineHeight: 1.3 }}>{p.title}</div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>{p.brand}</div>
+        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.3 }}>{p.title}</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.brand}</div>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>${p.price.toFixed(2)}</span>
-        {p.original_price && <span style={{ fontSize: 13, color: "#9ca3af", textDecoration: "line-through" }}>${p.original_price.toFixed(2)}</span>}
+        <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>${p.price.toFixed(2)}</span>
+        {p.original_price && <span style={{ fontSize: 13, color: "var(--text-faint)", textDecoration: "line-through" }}>${p.original_price.toFixed(2)}</span>}
       </div>
       <Stars rating={p.rating} />
-      <div style={{ fontSize: 12, color: "#6b7280" }}>📦 {p.shipping_eta} · {p.reviews.toLocaleString()} reviews</div>
-      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.4, margin: 0 }}>{p.explanation}</p>
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>📦 {p.shipping_eta} · {p.reviews.toLocaleString()} reviews</div>
+      <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4, margin: 0 }}>{p.explanation}</p>
       {Object.keys(p.specs).length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
           {Object.entries(p.specs).map(([k, v]) => (
-            <span key={k} style={{ fontSize: 10, background: "#f3f4f6", color: "#374151", padding: "2px 6px", borderRadius: 4 }}>{v}</span>
+            <span key={k} style={{ fontSize: 10, background: "var(--bg-muted)", color: "var(--text-secondary)", padding: "2px 6px", borderRadius: 4 }}>{v}</span>
           ))}
         </div>
       )}
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
         <motion.button whileTap={{ scale: 0.95 }} whileHover={{ scale: 1.02 }}
           onClick={() => onBuy(p)}
-          style={{ flex: 1, background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "8px 0", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+          style={{ flex: 1, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, padding: "8px 0", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
         >⚡ One-Click Buy</motion.button>
         <motion.button whileTap={{ scale: 0.95 }}
           onClick={() => onWatch(p)}
-          style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 13 }}
+          style={{ background: "var(--bg-btn-secondary)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 13 }}
         >👁️</motion.button>
         <motion.button whileTap={{ scale: 0.95 }}
           onClick={() => setShowLink(true)}
-          style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 13 }}
+          style={{ background: "var(--bg-btn-secondary)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 13 }}
         >🔗</motion.button>
       </div>
       <AnimatePresence>
         {showLink && (
           <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            style={{ position: "absolute", bottom: 60, left: 16, right: 16, background: "#fffbeb", border: "1px solid #fbbf24", borderRadius: 8, padding: 10, fontSize: 12, zIndex: 10 }}
+            style={{ position: "absolute", bottom: 60, left: 16, right: 16, background: "var(--bg-warning)", border: "1px solid var(--border-warning)", borderRadius: 8, padding: 10, fontSize: 12, zIndex: 10 }}
           >
-            <div style={{ fontWeight: 600, color: "#92400e" }}>⚠️ You are leaving Cliq</div>
-            <div style={{ color: "#78716c", marginTop: 2 }}>→ {p.source} ({(() => { try { return new URL(p.url).hostname; } catch { return p.url; } })()})</div>
+            <div style={{ fontWeight: 600, color: "var(--text-warning-title)" }}>⚠️ You are leaving Cliq</div>
+            <div style={{ color: "var(--text-warning-body)", marginTop: 2 }}>→ {p.source} ({(() => { try { return new URL(p.url).hostname; } catch { return p.url; } })()})</div>
             <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
               <button onClick={() => window.open(p.url, "_blank")} style={{ fontSize: 11, background: "#f59e0b", color: "#fff", border: "none", borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}>Continue</button>
-              <button onClick={() => setShowLink(false)} style={{ fontSize: 11, background: "#e5e7eb", border: "none", borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => setShowLink(false)} style={{ fontSize: 11, background: "var(--bg-muted)", color: "var(--text-secondary)", border: "none", borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}>Cancel</button>
             </div>
           </motion.div>
         )}
@@ -203,57 +262,57 @@ function BuyModal({ product, savedCard, onConfirm, onClose, onSaveCard }: {
 
   if (success) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-        <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ background: "#fff", borderRadius: 16, padding: 32, textAlign: "center", maxWidth: 380 }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+        <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ background: "var(--bg-surface)", borderRadius: 16, padding: 32, textAlign: "center", maxWidth: 380 }}>
           <div style={{ fontSize: 48 }}>🎉</div>
-          <h3 style={{ margin: "12px 0 4px", color: "#111827" }}>Order Placed!</h3>
-          <p style={{ color: "#6b7280", fontSize: 14 }}>{product.title} — ${product.price.toFixed(2)}</p>
-          <p style={{ color: "#9ca3af", fontSize: 12 }}>This is a simulated purchase. No real charge.</p>
-          <button onClick={onClose} style={{ marginTop: 12, background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 600, cursor: "pointer" }}>Done</button>
+          <h3 style={{ margin: "12px 0 4px", color: "var(--text-primary)" }}>Order Placed!</h3>
+          <p style={{ color: "var(--text-muted)", fontSize: 14 }}>{product.title} — ${product.price.toFixed(2)}</p>
+          <p style={{ color: "var(--text-faint)", fontSize: 12 }}>This is a simulated purchase. No real charge.</p>
+          <button onClick={onClose} style={{ marginTop: 12, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 600, cursor: "pointer" }}>Done</button>
         </motion.div>
       </motion.div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
       <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
-        style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 400, width: "90%", maxHeight: "85vh", overflowY: "auto" }}>
+        style={{ background: "var(--bg-surface)", borderRadius: 16, padding: 24, maxWidth: 400, width: "90%", maxHeight: "85vh", overflowY: "auto" }}>
         {step === "card" ? (
           <>
-            <h3 style={{ margin: "0 0 4px", color: "#111827" }}>Set Up Payment</h3>
-            <p style={{ color: "#6b7280", fontSize: 13, margin: "0 0 16px" }}>Save a card for one-click purchases</p>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Card Nickname</label>
-            <input value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: 8, marginTop: 4, marginBottom: 12, fontSize: 14, boxSizing: "border-box" }} />
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", cursor: "pointer" }}>
+            <h3 style={{ margin: "0 0 4px", color: "var(--text-primary)" }}>Set Up Payment</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: 13, margin: "0 0 16px" }}>Save a card for one-click purchases</p>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Card Nickname</label>
+            <input value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border-input)", borderRadius: 8, marginTop: 4, marginBottom: 12, fontSize: 14, boxSizing: "border-box", background: "var(--bg-input)", color: "var(--text-primary)" }} />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", cursor: "pointer" }}>
               <input type="checkbox" checked={isVirtual} onChange={e => setIsVirtual(e.target.checked)} /> Use a virtual card
             </label>
-            <p style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 0" }}>🔒 This is a simulation — no real card data is stored</p>
+            <p style={{ fontSize: 11, color: "var(--text-faint)", margin: "8px 0 0" }}>🔒 This is a simulation — no real card data is stored</p>
             <button onClick={() => { onSaveCard({ nickname, card_type: "visa", is_virtual: isVirtual }); setStep("confirm"); }}
-              style={{ width: "100%", marginTop: 16, background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}>Save & Continue</button>
+              style={{ width: "100%", marginTop: 16, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}>Save & Continue</button>
           </>
         ) : (
           <>
-            <h3 style={{ margin: "0 0 12px", color: "#111827" }}>Confirm Purchase</h3>
-            <div style={{ background: "#f9fafb", borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{product.title}</div>
-              <div style={{ fontSize: 13, color: "#6b7280" }}>{product.brand} · {product.shipping_eta}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>${product.price.toFixed(2)}</div>
+            <h3 style={{ margin: "0 0 12px", color: "var(--text-primary)" }}>Confirm Purchase</h3>
+            <div style={{ background: "var(--bg-surface-hover)", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{product.title}</div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{product.brand} · {product.shipping_eta}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: "var(--text-primary)" }}>${product.price.toFixed(2)}</div>
             </div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>Paying with: <strong>{savedCard?.nickname || nickname}</strong></div>
-            <div style={{ background: "#eff6ff", borderRadius: 8, padding: 10, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#1e40af", marginBottom: 4 }}>🔍 Fields we would auto-fill:</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Paying with: <strong>{savedCard?.nickname || nickname}</strong></div>
+            <div style={{ background: "var(--bg-autofill)", borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-autofill-title)", marginBottom: 4 }}>🔍 Fields we would auto-fill:</div>
               {Object.entries(autofillFields).map(([k, v]) => (
-                <div key={k} style={{ fontSize: 11, color: "#374151", display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#6b7280" }}>{k}:</span><span>{v}</span>
+                <div key={k} style={{ fontSize: 11, color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--text-muted)" }}>{k}:</span><span>{v}</span>
                 </div>
               ))}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={onClose} style={{ flex: 1, background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 0", cursor: "pointer", fontWeight: 500 }}>Cancel</button>
+              <button onClick={onClose} style={{ flex: 1, background: "var(--bg-btn-secondary)", border: "1px solid var(--border-default)", borderRadius: 8, padding: "10px 0", cursor: "pointer", fontWeight: 500, color: "var(--text-primary)" }}>Cancel</button>
               <motion.button whileTap={{ scale: 0.95 }}
                 onClick={() => { setSuccess(true); onConfirm(product, savedCard?.nickname || nickname); }}
-                style={{ flex: 2, background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}>Confirm Purchase</motion.button>
+                style={{ flex: 2, background: "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}>Confirm Purchase</motion.button>
             </div>
           </>
         )}
@@ -341,39 +400,40 @@ export default function CliqApp() {
   profile.purchase_history.forEach(p => { byCat[p.category || "other"] = (byCat[p.category || "other"] || 0) + p.price; });
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f8fafc", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-page)", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", transition: "background 0.2s ease" }}>
       {/* Header */}
-      <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+      <header style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border-default)", padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, transition: "background 0.2s, border-color 0.2s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 22 }}>🛒</span>
-          <span style={{ fontWeight: 700, fontSize: 18, color: "#111827" }}>Cliq</span>
-          <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: 4 }}>AI Shopping Agent</span>
+          <span style={{ fontWeight: 700, fontSize: 18, color: "var(--text-primary)" }}>Cliq</span>
+          <span style={{ fontSize: 12, color: "var(--text-faint)", marginLeft: 4 }}>AI Shopping Agent</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "#6b7280", background: "#f3f4f6", padding: "4px 10px", borderRadius: 99 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 99 }}>
             💰 ${totalSpent.toFixed(2)} spent
           </span>
           {profile.watchlist.length > 0 && (
-            <span style={{ fontSize: 12, color: "#6b7280", background: "#f3f4f6", padding: "4px 10px", borderRadius: 99 }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 99 }}>
               👁️ {profile.watchlist.length} watching
             </span>
           )}
+          <ThemeToggle />
         </div>
       </header>
 
       {/* Main */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Chat */}
-        <div style={{ flex: "0 0 45%", display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb" }}>
+        <div style={{ flex: "0 0 45%", display: "flex", flexDirection: "column", borderRight: "1px solid var(--border-default)" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
             {messages.map(msg => (
               <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", alignItems: "flex-start", gap: 8 }}>
-                {msg.role !== "user" && <div style={{ width: 28, height: 28, borderRadius: 99, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🤖</div>}
+                {msg.role !== "user" && <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--bg-bot-avatar)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🤖</div>}
                 <div style={{
                   maxWidth: "80%", padding: "10px 14px", borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                  background: msg.role === "user" ? "#2563eb" : "#fff", color: msg.role === "user" ? "#fff" : "#111827",
-                  border: msg.role === "user" ? "none" : "1px solid #e5e7eb", fontSize: 14, lineHeight: 1.5,
+                  background: msg.role === "user" ? "var(--bg-user-msg)" : "var(--bg-agent-msg)", color: msg.role === "user" ? "var(--text-on-primary)" : "var(--text-primary)",
+                  border: msg.role === "user" ? "none" : "1px solid var(--border-default)", fontSize: 14, lineHeight: 1.5, transition: "background 0.2s, border-color 0.2s, color 0.2s",
                 }}>
                   {msg.text}
                   {msg.options && msg.options.length > 0 && (
@@ -381,7 +441,7 @@ export default function CliqApp() {
                       {msg.options.map(opt => (
                         <motion.button key={opt} whileTap={{ scale: 0.95 }} whileHover={{ scale: 1.03 }}
                           onClick={() => send(opt)}
-                          style={{ background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", borderRadius: 99, padding: "5px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                          style={{ background: "var(--bg-option-btn)", color: "var(--text-accent)", border: "1px solid var(--border-option)", borderRadius: 99, padding: "5px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                           {opt}
                         </motion.button>
                       ))}
@@ -392,8 +452,8 @@ export default function CliqApp() {
             ))}
             {loading && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ width: 28, height: 28, borderRadius: 99, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🤖</div>
-                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "10px 16px", fontSize: 14, color: "#6b7280" }}>
+                <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--bg-bot-avatar)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🤖</div>
+                <div style={{ background: "var(--bg-agent-msg)", border: "1px solid var(--border-default)", borderRadius: 16, padding: "10px 16px", fontSize: 14, color: "var(--text-muted)" }}>
                   <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }}>Searching for the best options...</motion.span>
                 </div>
               </motion.div>
@@ -401,25 +461,25 @@ export default function CliqApp() {
             <div ref={msgEnd} />
           </div>
           {/* Input */}
-          <div style={{ padding: "10px 16px", borderTop: "1px solid #e5e7eb", background: "#fff" }}>
+          <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border-default)", background: "var(--bg-surface)", transition: "background 0.2s, border-color 0.2s" }}>
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); setInput(""); } }}
                 placeholder="Describe what you're looking for..."
-                style={{ flex: 1, padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 10, fontSize: 14, outline: "none" }}
+                style={{ flex: 1, padding: "10px 14px", border: "1px solid var(--border-input)", borderRadius: 10, fontSize: 14, outline: "none", background: "var(--bg-input)", color: "var(--text-primary)", transition: "background 0.2s, border-color 0.2s, color 0.2s" }}
               />
               <motion.button whileTap={{ scale: 0.9 }}
                 onClick={() => { send(input); setInput(""); }}
                 disabled={loading || !input.trim()}
-                style={{ background: loading || !input.trim() ? "#93c5fd" : "#2563eb", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontSize: 14 }}>
+                style={{ background: loading || !input.trim() ? "var(--bg-btn-primary-disabled)" : "var(--bg-btn-primary)", color: "var(--text-on-primary)", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontSize: 14 }}>
                 Send
               </motion.button>
             </div>
             <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
               {["I need a warm winter jacket", "Budget monitor for home office", "Carry-on suitcase under $150", "Cheap reliable headphones"].map(s => (
                 <button key={s} onClick={() => setInput(s)}
-                  style={{ fontSize: 11, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 99, padding: "3px 10px", cursor: "pointer" }}>
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg-suggestion)", border: "1px solid var(--border-default)", borderRadius: 99, padding: "3px 10px", cursor: "pointer" }}>
                   {s}
                 </button>
               ))}
@@ -429,10 +489,10 @@ export default function CliqApp() {
 
         {/* Right Panel */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}>
+          <div style={{ display: "flex", borderBottom: "1px solid var(--border-default)", background: "var(--bg-surface)", flexShrink: 0, transition: "background 0.2s, border-color 0.2s" }}>
             {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Spending"], ["watchlist", `Watchlist (${profile.watchlist.length})`]] as const).map(([k, label]) => (
               <button key={k} onClick={() => setTab(k)}
-                style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: tab === k ? 600 : 400, color: tab === k ? "#2563eb" : "#6b7280", background: "none", border: "none", borderBottom: tab === k ? "2px solid #2563eb" : "2px solid transparent", cursor: "pointer" }}>
+                style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: tab === k ? 600 : 400, color: tab === k ? "var(--text-accent)" : "var(--text-muted)", background: "none", border: "none", borderBottom: tab === k ? "2px solid var(--text-accent)" : "2px solid transparent", cursor: "pointer" }}>
                 {label}
               </button>
             ))}
@@ -443,7 +503,7 @@ export default function CliqApp() {
                 <motion.div key="prod" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
                   {products.length === 0 ? (
-                    <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9ca3af" }}>
+                    <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
                       <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
                       <p>Start a search to see product recommendations here.</p>
                     </div>
@@ -453,19 +513,19 @@ export default function CliqApp() {
               {tab === "history" && (
                 <motion.div key="hist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   {profile.purchase_history.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: 40, color: "#9ca3af" }}>
+                    <div style={{ textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
                       <div style={{ fontSize: 40, marginBottom: 8 }}>📦</div>
                       <p>No purchases yet. Try the one-click buy!</p>
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {profile.purchase_history.map((p, i) => (
-                        <div key={i} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s, border-color 0.2s" }}>
                           <div>
-                            <div style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{p.product_title}</div>
-                            <div style={{ fontSize: 12, color: "#6b7280" }}>{p.card_used} · {new Date(p.timestamp).toLocaleDateString()}</div>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{p.product_title}</div>
+                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.card_used} · {new Date(p.timestamp).toLocaleDateString()}</div>
                           </div>
-                          <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>${p.price.toFixed(2)}</div>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>${p.price.toFixed(2)}</div>
                         </div>
                       ))}
                     </div>
@@ -475,38 +535,38 @@ export default function CliqApp() {
               {tab === "spending" && (
                 <motion.div key="spend" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 20, textAlign: "center" }}>
-                    <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>Total Spent</div>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: "#111827" }}>${totalSpent.toFixed(2)}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{profile.purchase_history.length} purchase{profile.purchase_history.length !== 1 ? "s" : ""}</div>
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, textAlign: "center", transition: "background 0.2s, border-color 0.2s" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Total Spent</div>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: "var(--text-primary)" }}>${totalSpent.toFixed(2)}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{profile.purchase_history.length} purchase{profile.purchase_history.length !== 1 ? "s" : ""}</div>
                   </div>
                   {Object.keys(byCat).length > 0 && (
-                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>By Category</div>
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>By Category</div>
                       {Object.entries(byCat).map(([cat, amt]) => (
                         <div key={cat} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                          <span style={{ fontSize: 13, color: "#374151", textTransform: "capitalize" }}>{cat.replace(/_/g, " ")}</span>
+                          <span style={{ fontSize: 13, color: "var(--text-secondary)", textTransform: "capitalize" }}>{cat.replace(/_/g, " ")}</span>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ width: 80, height: 6, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
-                              <div style={{ height: "100%", background: "#2563eb", borderRadius: 3, width: `${Math.min((amt / totalSpent) * 100, 100)}%` }} />
+                            <div style={{ width: 80, height: 6, background: "var(--bg-progress-track)", borderRadius: 3, overflow: "hidden" }}>
+                              <div style={{ height: "100%", background: "var(--bg-progress-fill)", borderRadius: 3, width: `${Math.min((amt / totalSpent) * 100, 100)}%` }} />
                             </div>
-                            <span style={{ fontSize: 13, fontWeight: 600 }}>${amt.toFixed(2)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>${amt.toFixed(2)}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>Your Preferences</div>
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Your Preferences</div>
                     {([["Price Sensitivity", "price_sensitivity", ["budget", "balanced", "premium"]], ["Shipping", "shipping_preference", ["fastest", "normal", "cheapest"]]] as const).map(([label, key, opts]) => (
                       <div key={key} style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
                         <div style={{ display: "flex", gap: 4 }}>
                           {opts.map(o => {
                             const isActive = profile[key] === o;
                             return (
                               <button key={o} onClick={() => setProfile(p => ({ ...p, [key]: o }))}
-                                style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: isActive ? 600 : 400, background: isActive ? "#eff6ff" : "#f9fafb", color: isActive ? "#2563eb" : "#6b7280", border: isActive ? "1px solid #bfdbfe" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
+                                style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: isActive ? 600 : 400, background: isActive ? "var(--bg-option-btn)" : "var(--bg-suggestion)", color: isActive ? "var(--text-accent)" : "var(--text-muted)", border: isActive ? "1px solid var(--border-option)" : "1px solid var(--border-default)", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
                                 {o}
                               </button>
                             );
@@ -520,20 +580,20 @@ export default function CliqApp() {
               {tab === "watchlist" && (
                 <motion.div key="watch" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   {profile.watchlist.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: 40, color: "#9ca3af" }}>
+                    <div style={{ textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
                       <div style={{ fontSize: 40, marginBottom: 8 }}>👁️</div>
                       <p>No items on your watchlist. Click the 👁️ button on any product to watch it.</p>
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {profile.watchlist.map((w, i) => (
-                        <div key={i} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s, border-color 0.2s" }}>
                           <div>
-                            <div style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{w.product_title}</div>
-                            <div style={{ fontSize: 12, color: "#6b7280" }}>Current: ${w.current_price.toFixed(2)}</div>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{w.product_title}</div>
+                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Current: ${w.current_price.toFixed(2)}</div>
                           </div>
                           <button onClick={() => setProfile(p => ({ ...p, watchlist: p.watchlist.filter((_, j) => j !== i) }))}
-                            style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                            style={{ fontSize: 12, color: "var(--text-danger)", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
                         </div>
                       ))}
                     </div>
