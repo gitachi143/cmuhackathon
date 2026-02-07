@@ -273,11 +273,17 @@ export default function CliqApp() {
   const [buyTarget, setBuyTarget] = useState<UIProduct | null>(null);
   const [tab, setTab] = useState("products");
   const [profile, setProfile] = useState<UserProfile>(() => {
+    const defaults = { id: "default_user", price_sensitivity: "balanced", shipping_preference: "normal", preferred_brands: [], saved_card: null, purchase_history: [], watchlist: [] };
     try {
       const saved = localStorage.getItem("cliq_profile_v2");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!["fastest", "normal", "cheapest"].includes(parsed.shipping_preference)) parsed.shipping_preference = "normal";
+        if (!["budget", "balanced", "premium"].includes(parsed.price_sensitivity)) parsed.price_sensitivity = "balanced";
+        return { ...defaults, ...parsed };
+      }
     } catch {}
-    return { id: "default_user", price_sensitivity: "balanced", shipping_preference: "balanced", preferred_brands: [], saved_card: null, purchase_history: [], watchlist: [] };
+    return defaults;
   });
   const msgEnd = useRef<HTMLDivElement>(null);
   const idRef = useRef(0);
@@ -485,7 +491,7 @@ export default function CliqApp() {
                   )}
                   <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>Your Preferences</div>
-                    {([["Price Sensitivity", "price_sensitivity", ["budget", "balanced", "premium"]], ["Shipping", "shipping_preference", ["fastest", "balanced", "cheapest"]]] as const).map(([label, key, opts]) => (
+                    {([["Price Sensitivity", "price_sensitivity", ["budget", "balanced", "premium"]], ["Shipping", "shipping_preference", ["fastest", "normal", "cheapest"]]] as const).map(([label, key, opts]) => (
                       <div key={key} style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{label}</div>
                         <div style={{ display: "flex", gap: 4 }}>
