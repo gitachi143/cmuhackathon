@@ -38,9 +38,10 @@ When a user asks for something:
    - Is the use-case clear? (hiking vs office vs date night?)
    - Do you know their gender/size/style if it matters for this product?
    - Do you know their budget range?
-2. If AMBIGUOUS → ask ONE focused clarifying question with 3-5 clickable options. Do NOT recommend products yet. Set products to empty array [].
-3. If CLEAR ENOUGH → recommend 3-5 products. Use their profile (gender, age, style, climate, sizes, interests) to personalize.
-4. ALWAYS explain your reasoning. Start agent_message with what info you used, e.g. "Since you mentioned you're into hiking and prefer budget options, ..."
+2. IMPORTANT: You do NOT always need to ask a question. If the user's profile already provides enough context (e.g. they have use_cases, style, climate set), use that info to make good recommendations directly. Only ask a clarifying question when you truly lack critical info AND the user's profile doesn't help.
+3. If TRULY AMBIGUOUS and profile doesn't help → ask ONE focused clarifying question with 3-5 clickable options. Do NOT recommend products yet. Set products to empty array [].
+4. If CLEAR ENOUGH (from query OR from profile) → recommend 3-5 products. Use their profile (gender, age, style, climate, sizes, interests) to personalize.
+5. ALWAYS explain your reasoning. Start agent_message with what info you used, e.g. "Since you mentioned you're into hiking and prefer budget options, ..."
 
 ## LEARNING FROM CONVERSATION
 Analyze the conversation to extract any new info about the user. Return a "learned_preferences" object with any NEW facts you picked up:
@@ -241,8 +242,17 @@ def generate_mock_response(request: SearchRequest) -> SearchResponse:
                 matched_use = uc
                 break
 
-        if matched_use is None and not any(w in query_lower for w in ["budget", "cheap", "premium", "under"]):
-            # Ambiguous jacket query - ask what kind
+        # Check if user profile already gives us enough context to skip the question
+        has_profile_context = False
+        if request.user_profile:
+            lp = request.user_profile.learned
+            if lp.use_cases or lp.style or lp.climate:
+                has_profile_context = True
+                if lp.use_cases:
+                    matched_use = lp.use_cases[0]
+
+        if matched_use is None and not has_profile_context and not any(w in query_lower for w in ["budget", "cheap", "premium", "under"]):
+            # Only ask if truly ambiguous AND no profile context helps
             thinking = "User wants a jacket but didn't specify the type or use-case. Need to narrow it down."
             follow_up = FollowUpQuestion(
                 question="What kind of jacket are you looking for? This helps me find the perfect match!",
@@ -275,7 +285,13 @@ def generate_mock_response(request: SearchRequest) -> SearchResponse:
         category = "laptops"
         thinking = "User needs a laptop. Will factor in their interests and budget."
     elif any(w in query_lower for w in shoe_words):
-        if not any(w in query_lower for w in ["running", "hiking", "casual", "formal", "gym", "trail"]):
+        has_shoe_context = False
+        if request.user_profile:
+            lp = request.user_profile.learned
+            if lp.use_cases or lp.style:
+                has_shoe_context = True
+
+        if not has_shoe_context and not any(w in query_lower for w in ["running", "hiking", "casual", "formal", "gym", "trail"]):
             thinking = "User wants shoes but didn't specify the activity. Need to clarify."
             follow_up = FollowUpQuestion(
                 question="What will you mainly use these shoes for?",
@@ -350,17 +366,23 @@ def generate_mock_response(request: SearchRequest) -> SearchResponse:
     learned = _extract_preferences_from_query(query_lower)
 
     if category == "general":
-        follow_up = FollowUpQuestion(
-            question="I'd love to help! What kind of product are you looking for?",
-            options=[
-                "Winter clothing / Jackets",
-                "Electronics (monitors, laptops, headphones)",
-                "Shoes & footwear",
-                "Travel gear / Luggage",
-            ],
+        # Only ask for category if the query is truly vague (very short / no product signal)
+        words = query_lower.split()
+        is_very_vague = len(words) <= 2 and not any(
+            w in query_lower for w in ["buy", "get", "find", "need", "want", "looking", "recommend"]
         )
-        agent_message = "I want to make sure I find exactly what you need. What category are you shopping in?"
-        thinking = "Query is too broad to determine category. Asking for clarification."
+        if is_very_vague:
+            follow_up = FollowUpQuestion(
+                question="I'd love to help! What kind of product are you looking for?",
+                options=[
+                    "Winter clothing / Jackets",
+                    "Electronics (monitors, laptops, headphones)",
+                    "Shoes & footwear",
+                    "Travel gear / Luggage",
+                ],
+            )
+            agent_message = "I want to make sure I find exactly what you need. What category are you shopping in?"
+            thinking = "Query is too broad to determine category. Asking for clarification."
 
     return SearchResponse(
         agent_message=agent_message,
