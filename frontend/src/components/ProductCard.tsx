@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Star, Truck, Tag, ExternalLink, ShoppingCart, Bookmark, Gift } from 'lucide-react';
+import { Star, Truck, Tag, ExternalLink, ShoppingCart, Bookmark, Gift, ImageOff } from 'lucide-react';
 import type { Product } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 
@@ -37,6 +38,7 @@ function StarRating({ rating }: { rating: number }) {
 export default function ProductCard({ product, onBuy, onView }: ProductCardProps) {
   const { watchlist, addToWatchlist, removeFromWatchlist } = useUserProfile();
   const isWatched = watchlist.includes(product.id);
+  const [imgError, setImgError] = useState(false);
 
   const tagColor = VALUE_TAG_COLORS[product.value_tag] || 'bg-slate-100 text-slate-700 border-slate-200';
 
@@ -45,6 +47,22 @@ export default function ProductCard({ product, onBuy, onView }: ProductCardProps
       whileHover={{ y: -2 }}
       className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg hover:shadow-slate-100 transition-all duration-200"
     >
+      {/* Product Image */}
+      {product.image_url && !imgError ? (
+        <div className="w-full h-48 overflow-hidden bg-slate-100">
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        </div>
+      ) : (
+        <div className="w-full h-32 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+          <ImageOff className="w-8 h-8 text-slate-300" />
+        </div>
+      )}
+
       <div className="p-5">
         {/* Header: Tag + Source */}
         <div className="flex items-center justify-between mb-3">
