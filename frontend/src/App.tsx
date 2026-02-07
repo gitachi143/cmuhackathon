@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "./context/ThemeContext";
+import type { SpendingAnalytics, SpendingHabits, NessieAccount, NessiePurchase } from "./types";
 
 // ── Types ──────────────────────────────────────────────
 interface BackendProduct {
@@ -503,6 +504,12 @@ export default function CliqApp() {
   const [loading, setLoading] = useState(false);
   const [buyTarget, setBuyTarget] = useState<UIProduct | null>(null);
   const [tab, setTab] = useState("products");
+  const [analytics, setAnalytics] = useState<SpendingAnalytics | null>(null);
+  const [habits, setHabits] = useState<SpendingHabits | null>(null);
+  const [nessieAccounts, setNessieAccounts] = useState<NessieAccount[]>([]);
+  const [nessiePurchases, setNessiePurchases] = useState<NessiePurchase[]>([]);
+  const [nessieConnected, setNessieConnected] = useState(false);
+  const [nessieLoading, setNessieLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(() => {
     try {
       return localStorage.getItem("cliq_has_searched") === "true";
@@ -575,6 +582,37 @@ export default function CliqApp() {
   }, [hasSearched]);
 
   useEffect(() => { msgEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  // Fetch analytics & Nessie data when spending/banking tabs are opened
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const [analyticsRes, habitsRes] = await Promise.all([
+        fetch("/api/spending/analytics").then(r => r.json()),
+        fetch("/api/spending/habits").then(r => r.json()),
+      ]);
+      setAnalytics(analyticsRes);
+      setHabits(habitsRes);
+    } catch (e) { console.error("Analytics fetch error:", e); }
+  }, []);
+
+  const loadNessie = useCallback(async () => {
+    setNessieLoading(true);
+    try {
+      const [accRes, purchRes] = await Promise.all([
+        fetch("/api/nessie/accounts").then(r => r.json()),
+        fetch("/api/nessie/purchases").then(r => r.json()),
+      ]);
+      setNessieAccounts(accRes.accounts || []);
+      setNessieConnected(accRes.connected || false);
+      setNessiePurchases(purchRes.purchases || []);
+    } catch (e) { console.error("Nessie fetch error:", e); }
+    setNessieLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (tab === "spending") loadAnalytics();
+    if (tab === "banking") loadNessie();
+  }, [tab, loadAnalytics, loadNessie]);
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || loading) return;
@@ -913,10 +951,10 @@ export default function CliqApp() {
           transition={{ duration: 0.3, delay: 0.1 }}
           style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
         >
-          <div style={{ display: "flex", borderBottom: "1px solid var(--border-default)", background: "var(--bg-surface)", flexShrink: 0, transition: "background 0.2s, border-color 0.2s" }}>
-            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Spending"], ["watchlist", `Watchlist (${profile.watchlist.length})`], ["searches", `Searches (${profile.search_history.length})`]] as const).map(([k, label]) => (
+          <div style={{ display: "flex", borderBottom: "1px solid var(--border-default)", background: "var(--bg-surface)", flexShrink: 0, transition: "background 0.2s, border-color 0.2s", overflowX: "auto" }}>
+            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Analytics"], ["watchlist", `Watchlist (${profile.watchlist.length})`], ["banking", "Banking"], ["searches", `Searches (${profile.search_history.length})`]] as const).map(([k, label]) => (
               <button key={k} onClick={() => setTab(k)}
-                style={{ flex: 1, padding: "10px 0", fontSize: 13, fontWeight: tab === k ? 600 : 400, color: tab === k ? "var(--text-accent)" : "var(--text-muted)", background: "none", border: "none", borderBottom: tab === k ? "2px solid var(--text-accent)" : "2px solid transparent", cursor: "pointer" }}>
+                style={{ flex: 1, padding: "10px 0", fontSize: 12, fontWeight: tab === k ? 600 : 400, color: tab === k ? "var(--text-accent)" : "var(--text-muted)", background: "none", border: "none", borderBottom: tab === k ? "2px solid var(--text-accent)" : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap" }}>
                 {label}
               </button>
             ))}
@@ -958,60 +996,197 @@ export default function CliqApp() {
               )}
               {tab === "spending" && (
                 <motion.div key="spend" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, textAlign: "center", transition: "background 0.2s, border-color 0.2s" }}>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Total Spent</div>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: "var(--text-primary)" }}>${totalSpent.toFixed(2)}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{profile.purchase_history.length} purchase{profile.purchase_history.length !== 1 ? "s" : ""}</div>
+                  style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {/* Summary Cards Row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                    {[
+                      { label: "Total Spent", value: `$${(analytics?.total_spent ?? totalSpent).toFixed(2)}`, color: "#6366f1" },
+                      { label: "Avg / Purchase", value: `$${(analytics?.avg_per_purchase ?? 0).toFixed(2)}`, color: "#10b981" },
+                      { label: "Daily Avg", value: `$${(analytics?.daily_average ?? 0).toFixed(2)}`, color: "#f59e0b" },
+                      { label: "Transactions", value: `${analytics?.purchase_count ?? profile.purchase_history.length}`, color: "#8b5cf6" },
+                    ].map(c => (
+                      <div key={c.label} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: "14px 12px", textAlign: "center", borderTop: `3px solid ${c.color}` }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{c.value}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{c.label}</div>
+                      </div>
+                    ))}
                   </div>
-                  {Object.keys(byCat).length > 0 && (
-                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>By Category</div>
-                      {Object.entries(byCat).map(([cat, amt]) => (
-                        <div key={cat} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                          <span style={{ fontSize: 13, color: "var(--text-secondary)", textTransform: "capitalize" }}>{cat.replace(/_/g, " ")}</span>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ width: 80, height: 6, background: "var(--bg-progress-track)", borderRadius: 3, overflow: "hidden" }}>
-                              <div style={{ height: "100%", background: "var(--bg-progress-fill)", borderRadius: 3, width: `${Math.min((amt / totalSpent) * 100, 100)}%` }} />
+
+                  {/* Data Source Badge */}
+                  {analytics?.source && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: analytics.source.nessie_connected ? "#dcfce7" : "#fef3c7", color: analytics.source.nessie_connected ? "#166534" : "#92400e", fontWeight: 600 }}>
+                        {analytics.source.nessie_connected ? "Capital One Connected" : "Capital One: Demo Data"}
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                        {analytics.source.bank_transactions} bank txns + {analytics.source.app_purchases} app purchases
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Spending Habits Insights */}
+                  {habits && habits.insights.length > 0 && (
+                    <div style={{ background: "linear-gradient(135deg, #eef2ff, #faf5ff)", border: "1px solid #c7d2fe", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#4338ca", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Smart Insights</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {habits.insights.map((insight, i) => (
+                          <div key={i} style={{ fontSize: 13, color: "#3730a3", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>💡</span> {insight}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Spending Velocity + Habits Row */}
+                  {habits && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending Habits</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "var(--text-muted)" }}>Frequency</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600, textTransform: "capitalize" }}>{habits.frequency}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "var(--text-muted)" }}>Busiest Day</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{habits.busiest_day || "—"}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "var(--text-muted)" }}>Avg Weekly</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${habits.avg_weekly_spend.toFixed(2)}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "var(--text-muted)" }}>Avg Monthly</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${habits.avg_monthly_spend.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending Velocity</div>
+                        <div style={{ textAlign: "center", padding: "8px 0" }}>
+                          <div style={{ fontSize: 28, fontWeight: 700, color: habits.spending_velocity === "increasing" ? "#ef4444" : habits.spending_velocity === "decreasing" ? "#10b981" : "var(--text-primary)" }}>
+                            {habits.spending_velocity === "increasing" ? "📈" : habits.spending_velocity === "decreasing" ? "📉" : "➡️"}
+                          </div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", textTransform: "capitalize", marginTop: 4 }}>{habits.spending_velocity}</div>
+                          {habits.velocity_pct !== 0 && (
+                            <div style={{ fontSize: 11, color: habits.velocity_pct > 0 ? "#ef4444" : "#10b981", marginTop: 2 }}>
+                              {habits.velocity_pct > 0 ? "+" : ""}{habits.velocity_pct}% vs last month
                             </div>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>${amt.toFixed(2)}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Monthly Spending Trend (Bar Chart) */}
+                  {analytics && analytics.monthly_totals.length > 0 && (
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Monthly Spending Trend</div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 100 }}>
+                        {analytics.monthly_totals.map((m, i) => {
+                          const max = Math.max(...analytics.monthly_totals.map(t => t.amount));
+                          const h = max > 0 ? (m.amount / max) * 80 : 4;
+                          return (
+                            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600 }}>${m.amount.toFixed(0)}</div>
+                              <div style={{ width: "100%", height: h, background: "linear-gradient(180deg, #6366f1, #818cf8)", borderRadius: 4, minHeight: 4 }} />
+                              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>{m.month.split("-")[1]}/{m.month.split("-")[0].slice(2)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Day of Week Breakdown */}
+                  {habits && habits.day_breakdown && (
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Spending by Day of Week</div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
+                        {Object.entries(habits.day_breakdown).map(([day, data]) => {
+                          const max = Math.max(...Object.values(habits.day_breakdown).map(d => d.amount));
+                          const h = max > 0 ? (data.amount / max) * 60 : 4;
+                          return (
+                            <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                              <div style={{ fontSize: 9, color: "var(--text-muted)" }}>${data.amount.toFixed(0)}</div>
+                              <div style={{ width: "100%", height: h, background: day === habits.busiest_day ? "#f59e0b" : "#c7d2fe", borderRadius: 3, minHeight: 4 }} />
+                              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>{day.slice(0, 3)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Merchants */}
+                  {analytics && analytics.top_merchants.length > 0 && (
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Top Merchants</div>
+                      {analytics.top_merchants.slice(0, 6).map((m, i) => (
+                        <div key={m.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: i < 5 ? "1px solid var(--border-default)" : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", width: 16 }}>#{i + 1}</span>
+                            <span style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{m.name}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{m.count} txns</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>${m.amount.toFixed(2)}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  {/* Saved Personal Info */}
-                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Saved Info</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {[
-                        ["Name", profile.personal_info.name],
-                        ["Email", profile.personal_info.email],
-                        ["Address", [profile.shipping_address.address_line, profile.shipping_address.city, profile.shipping_address.state, profile.shipping_address.zip].filter(Boolean).join(", ")],
-                        ["Card", profile.saved_card ? `${profile.saved_card.nickname} (****${profile.saved_card.last_four})` : null],
-                      ].map(([label, value]) => (
-                        <div key={label as string} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0" }}>
-                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
-                          <span style={{ color: value ? "var(--text-primary)" : "var(--text-faint)", fontWeight: value ? 500 : 400 }}>{(value as string) || "Not set"}</span>
+
+                  {/* Recurring Charges */}
+                  {habits && habits.recurring_charges.length > 0 && (
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Recurring Charges (Subscriptions)</div>
+                      {habits.recurring_charges.map(r => (
+                        <div key={r.merchant} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
+                          <div>
+                            <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{r.merchant}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{r.frequency}</div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>${r.amount.toFixed(2)}/ea</div>
+                            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Total: ${r.total.toFixed(2)}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => setBuyTarget({ id: "__edit__", title: "Edit Info", brand: "", price: 0, original_price: null, shipping_eta: "", rating: 0, reviews: 0, tag: "", explanation: "", source: "", url: "", category: "", coupons: 0, specs: {} })}
-                      style={{ width: "100%", marginTop: 10, padding: "8px 0", fontSize: 12, fontWeight: 600, background: "var(--bg-btn-secondary)", color: "var(--text-accent)", border: "1px solid var(--border-default)", borderRadius: 8, cursor: "pointer" }}>
-                      Edit Details
-                    </button>
-                  </div>
-                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 16, transition: "background 0.2s, border-color 0.2s" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Your Preferences</div>
+                  )}
+
+                  {/* By Category */}
+                  {analytics && Object.keys(analytics.by_category).length > 0 && (
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending by Category</div>
+                      {Object.entries(analytics.by_category).sort((a, b) => b[1].amount - a[1].amount).map(([cat, data]) => (
+                        <div key={cat} style={{ padding: "5px 0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                            <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{cat}</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${data.amount.toFixed(2)} ({data.count})</span>
+                          </div>
+                          <div style={{ width: "100%", height: 6, background: "var(--bg-progress-track)", borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ height: "100%", background: "linear-gradient(90deg, #6366f1, #a78bfa)", borderRadius: 3, width: `${Math.min((data.amount / (analytics.total_spent || 1)) * 100, 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Preferences & Personal Info */}
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Your Preferences</div>
                     {([["Price Sensitivity", "price_sensitivity", ["budget", "balanced", "premium"]], ["Shipping", "shipping_preference", ["fastest", "normal", "cheapest"]]] as const).map(([label, key, opts]) => (
-                      <div key={key} style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
+                      <div key={key} style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 3 }}>{label}</div>
                         <div style={{ display: "flex", gap: 4 }}>
                           {opts.map(o => {
                             const isActive = profile[key] === o;
                             return (
                               <button key={o} onClick={() => setProfile(p => ({ ...p, [key]: o }))}
-                                style={{ flex: 1, padding: "6px 0", fontSize: 12, fontWeight: isActive ? 600 : 400, background: isActive ? "var(--bg-option-btn)" : "var(--bg-suggestion)", color: isActive ? "var(--text-accent)" : "var(--text-muted)", border: isActive ? "1px solid var(--border-option)" : "1px solid var(--border-default)", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
+                                style={{ flex: 1, padding: "5px 0", fontSize: 11, fontWeight: isActive ? 600 : 400, background: isActive ? "var(--bg-option-btn)" : "var(--bg-suggestion)", color: isActive ? "var(--text-accent)" : "var(--text-muted)", border: isActive ? "1px solid var(--border-option)" : "1px solid var(--border-default)", borderRadius: 6, cursor: "pointer", textTransform: "capitalize" }}>
                                 {o}
                               </button>
                             );
@@ -1019,6 +1194,10 @@ export default function CliqApp() {
                         </div>
                       </div>
                     ))}
+                    <button onClick={() => setBuyTarget({ id: "__edit__", title: "Edit Info", brand: "", price: 0, original_price: null, shipping_eta: "", rating: 0, reviews: 0, tag: "", explanation: "", source: "", url: "", category: "", coupons: 0, specs: {} })}
+                      style={{ width: "100%", marginTop: 8, padding: "7px 0", fontSize: 11, fontWeight: 600, background: "var(--bg-btn-secondary)", color: "var(--text-accent)", border: "1px solid var(--border-default)", borderRadius: 8, cursor: "pointer" }}>
+                      Edit Details
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -1031,12 +1210,50 @@ export default function CliqApp() {
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {/* Price Drop Summary */}
+                      {(() => {
+                        const drops = profile.watchlist.filter(w => {
+                          const first = w.price_history?.[0]?.price ?? w.current_price;
+                          return w.current_price < first;
+                        });
+                        const totalSavings = drops.reduce((s, w) => s + ((w.price_history?.[0]?.price ?? w.current_price) - w.current_price), 0);
+                        return drops.length > 0 ? (
+                          <div style={{ background: "linear-gradient(135deg, #ecfdf5, #d1fae5)", border: "1px solid #6ee7b7", borderRadius: 12, padding: 14 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46", textTransform: "uppercase", letterSpacing: 0.5 }}>Price Drops Detected</div>
+                                <div style={{ fontSize: 13, color: "#047857", marginTop: 2 }}>{drops.length} item{drops.length > 1 ? "s" : ""} dropped in price</div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: "#059669" }}>${totalSavings.toFixed(2)}</div>
+                                <div style={{ fontSize: 11, color: "#047857" }}>potential savings</div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
                       {profile.watchlist.map((w, i) => {
                         const firstPrice = w.price_history?.[0]?.price ?? w.current_price;
                         const priceDiff = w.current_price - firstPrice;
                         const pctChange = firstPrice > 0 ? ((priceDiff / firstPrice) * 100) : 0;
+                        const hitTarget = w.target_price !== null && w.current_price <= w.target_price;
                         return (
-                          <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, transition: "background 0.2s, border-color 0.2s" }}>
+                          <div key={i} style={{
+                            background: "var(--bg-surface)", borderRadius: 10, padding: 14,
+                            border: hitTarget ? "2px solid #10b981" : priceDiff < 0 ? "1px solid #6ee7b7" : "1px solid var(--border-default)",
+                            transition: "background 0.2s, border-color 0.2s",
+                          }}>
+                            {hitTarget && (
+                              <div style={{ background: "#dcfce7", color: "#166534", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 6, marginBottom: 8, display: "inline-block" }}>
+                                TARGET PRICE REACHED — BUY NOW!
+                              </div>
+                            )}
+                            {!hitTarget && priceDiff < 0 && (
+                              <div style={{ background: "#ecfdf5", color: "#065f46", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6, marginBottom: 8, display: "inline-block" }}>
+                                PRICE DROP: ${Math.abs(priceDiff).toFixed(2)} off ({Math.abs(pctChange).toFixed(1)}%)
+                              </div>
+                            )}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>{w.product_title}</div>
@@ -1056,8 +1273,36 @@ export default function CliqApp() {
                                   {priceDiff < 0 ? "▼" : "▲"} ${Math.abs(priceDiff).toFixed(2)} ({Math.abs(pctChange).toFixed(1)}%)
                                 </span>
                               )}
+                              {firstPrice !== w.current_price && (
+                                <span style={{ fontSize: 11, color: "var(--text-faint)", textDecoration: "line-through" }}>${firstPrice.toFixed(2)}</span>
+                              )}
                             </div>
-                            {w.shipping_eta && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>📦 {w.shipping_eta}</div>}
+
+                            {/* Target Price Input */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, background: "var(--bg-muted)", borderRadius: 8, padding: "6px 10px" }}>
+                              <span style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>Target: $</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={w.target_price ?? ""}
+                                placeholder={`e.g. ${(w.current_price * 0.85).toFixed(2)}`}
+                                onChange={e => {
+                                  const val = e.target.value ? parseFloat(e.target.value) : null;
+                                  setProfile(p => ({
+                                    ...p,
+                                    watchlist: p.watchlist.map((item, j) => j === i ? { ...item, target_price: val } : item),
+                                  }));
+                                }}
+                                style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, color: "var(--text-primary)", fontWeight: 600, minWidth: 0 }}
+                              />
+                              {w.target_price !== null && w.target_price > 0 && (
+                                <span style={{ fontSize: 10, color: w.current_price <= w.target_price ? "#10b981" : "#f59e0b", fontWeight: 600 }}>
+                                  {w.current_price <= w.target_price ? "Reached!" : `$${(w.current_price - w.target_price).toFixed(2)} away`}
+                                </span>
+                              )}
+                            </div>
+
+                            {w.shipping_eta && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>📦 {w.shipping_eta}</div>}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
                               <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
                                 Tracking since {new Date(w.added_at).toLocaleDateString()} · {w.price_history?.length || 1} price point{(w.price_history?.length || 1) !== 1 ? "s" : ""}
@@ -1069,24 +1314,117 @@ export default function CliqApp() {
                             </div>
                             {/* Mini price history */}
                             {w.price_history && w.price_history.length > 1 && (
-                              <div style={{ marginTop: 8, display: "flex", gap: 4, alignItems: "flex-end", height: 24 }}>
-                                {w.price_history.map((ph, j) => {
-                                  const prices = w.price_history.map(p => p.price);
-                                  const min = Math.min(...prices);
-                                  const max = Math.max(...prices);
-                                  const range = max - min || 1;
-                                  const height = Math.max(4, ((ph.price - min) / range) * 20);
-                                  return (
-                                    <div key={j} title={`$${ph.price.toFixed(2)} on ${new Date(ph.date).toLocaleDateString()}`}
-                                      style={{ flex: 1, height, background: ph.price <= firstPrice ? "#10b981" : "#ef4444", borderRadius: 2, minWidth: 3, maxWidth: 16 }} />
-                                  );
-                                })}
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ fontSize: 10, color: "var(--text-faint)", marginBottom: 4 }}>Price History</div>
+                                <div style={{ display: "flex", gap: 4, alignItems: "flex-end", height: 32 }}>
+                                  {w.price_history.map((ph, j) => {
+                                    const prices = w.price_history.map(p => p.price);
+                                    const min = Math.min(...prices);
+                                    const max = Math.max(...prices);
+                                    const range = max - min || 1;
+                                    const height = Math.max(4, ((ph.price - min) / range) * 28);
+                                    return (
+                                      <div key={j} title={`$${ph.price.toFixed(2)} on ${new Date(ph.date).toLocaleDateString()}`}
+                                        style={{ flex: 1, height, background: ph.price <= firstPrice ? "#10b981" : "#ef4444", borderRadius: 2, minWidth: 3, maxWidth: 20 }} />
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
                           </div>
                         );
                       })}
                     </div>
+                  )}
+                </motion.div>
+              )}
+              {tab === "banking" && (
+                <motion.div key="bank" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+                  {/* Header */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 20 }}>🏦</span>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Capital One Banking</div>
+                        <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Powered by Nessie API</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: nessieConnected ? "#dcfce7" : "#fef3c7", color: nessieConnected ? "#166534" : "#92400e", fontWeight: 600 }}>
+                      {nessieConnected ? "Live" : "Demo Mode"}
+                    </span>
+                  </div>
+
+                  {nessieLoading ? (
+                    <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} style={{ display: "inline-block", fontSize: 24 }}>⏳</motion.div>
+                      <p style={{ fontSize: 13, marginTop: 8 }}>Loading banking data...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Account Cards */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                        {nessieAccounts.map(acc => (
+                          <div key={acc.id} style={{
+                            background: acc.type === "Credit Card" ? "linear-gradient(135deg, #1e3a5f, #312e81)" : acc.type === "Savings" ? "linear-gradient(135deg, #064e3b, #065f46)" : "linear-gradient(135deg, #1e40af, #3730a3)",
+                            borderRadius: 12, padding: 16, color: "#fff",
+                          }}>
+                            <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 500 }}>{acc.type}</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{acc.nickname}</div>
+                            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 8 }}>${acc.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, opacity: 0.7 }}>
+                              <span>{acc.account_number}</span>
+                              {acc.rewards > 0 && <span>{acc.rewards.toLocaleString()} pts</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total Balance Summary */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total Balance</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginTop: 2 }}>
+                            ${nessieAccounts.reduce((s, a) => s + a.balance, 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total Rewards</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b", marginTop: 2 }}>
+                            {nessieAccounts.reduce((s, a) => s + a.rewards, 0).toLocaleString()} pts
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Recent Bank Transactions */}
+                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Recent Transactions</div>
+                        {nessiePurchases.length === 0 ? (
+                          <div style={{ textAlign: "center", padding: 20, color: "var(--text-faint)", fontSize: 13 }}>No transactions found</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {nessiePurchases.slice(0, 20).map((txn, i) => (
+                              <div key={txn.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 19 ? "1px solid var(--border-default)" : "none" }}>
+                                <div>
+                                  <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{txn.merchant_name || txn.description}</div>
+                                  <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                                    {txn.category && <span>{txn.category} · </span>}
+                                    {txn.purchase_date}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>${txn.amount.toFixed(2)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {nessiePurchases.length > 20 && (
+                          <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center", marginTop: 8 }}>
+                            Showing 20 of {nessiePurchases.length} transactions
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </motion.div>
               )}
