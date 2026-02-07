@@ -5,13 +5,12 @@ interface HeaderProps {
   input: string;
   setInput: (val: string) => void;
   loading: boolean;
-  totalSpent: number;
   watchlistCount: number;
   onSend: (text: string) => void;
   onReset: () => void;
 }
 
-export function Header({ input, setInput, loading, totalSpent, watchlistCount, onSend, onReset }: HeaderProps) {
+export function Header({ input, setInput, loading, watchlistCount, onSend, onReset }: HeaderProps) {
   return (
     <header
       style={{
@@ -94,9 +93,6 @@ export function Header({ input, setInput, loading, totalSpent, watchlistCount, o
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 99 }}>
-          {"\u{1F4B0}"} ${totalSpent.toFixed(2)} spent
-        </span>
         {watchlistCount > 0 && (
           <span style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 99 }}>
             {"\u{1F441}\uFE0F"} {watchlistCount} watching
