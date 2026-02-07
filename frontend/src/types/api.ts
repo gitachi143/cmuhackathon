@@ -1,3 +1,8 @@
+/**
+ * API-level types — shapes matching the backend response models.
+ * Used by the API client layer.
+ */
+
 export interface Product {
   id: string;
   name: string;
@@ -39,9 +44,9 @@ export interface SearchResponse {
   follow_up_question?: FollowUpQuestion | null;
 }
 
-export interface UserProfile {
-  price_sensitivity: 'budget' | 'balanced' | 'premium';
-  shipping_preference: 'fastest' | 'normal' | 'cheapest';
+export interface UserProfileAPI {
+  price_sensitivity: "budget" | "balanced" | "premium";
+  shipping_preference: "fastest" | "normal" | "cheapest";
   preferred_brands: string[];
   saved_card?: SavedCard | null;
 }
@@ -53,7 +58,7 @@ export interface SavedCard {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'agent';
+  role: "user" | "agent";
   content: string;
   products?: Product[];
   follow_up_question?: FollowUpQuestion | null;
@@ -134,7 +139,7 @@ export interface PriceDrop {
   hit_target: boolean;
   brand: string;
   category: string;
-  alert_level: 'high' | 'medium' | 'low';
+  alert_level: "high" | "medium" | "low";
 }
 
 export interface PriceDropsResponse {
