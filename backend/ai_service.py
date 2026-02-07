@@ -60,8 +60,8 @@ Only include fields where you learned something NEW from THIS conversation. Omit
 ## IMPORTANT RULES
 - Generate realistic mock products with real brand names and realistic prices
 - Each product MUST have a unique id (format: "prod-001", "prod-002", etc.)
-- For source_url, use REAL retailer search URLs (e.g., "https://www.amazon.com/s?k=Sony+WH-1000XM5")
-- For image_url, use Unsplash: "https://images.unsplash.com/photo-{id}?w=400&h=300&fit=crop"
+- For source_url, use REAL retailer product or search URLs (e.g., "https://www.amazon.com/s?k=Sony+WH-1000XM5")
+- For image_url, set it to null — the backend will automatically find real product images
 - When asking a follow-up, do NOT include products — set products to []
 - Always respect the user's stated preferences (brands, price range, etc.)
 
@@ -91,7 +91,7 @@ You MUST respond with valid JSON only (no markdown, no code blocks):
       "value_tag": "Best value" | "Best overall" | "Fastest shipping" | "Budget pick" | "Premium pick",
       "description": "One-line description",
       "why_recommended": "Specific reason this matches the user",
-      "image_url": "https://images.unsplash.com/photo-XXXXXXX?w=400&h=300&fit=crop",
+      "image_url": null,
       "source_name": "Amazon",
       "source_url": "https://www.amazon.com/s?k=Product+Name",
       "category": "category_name",
