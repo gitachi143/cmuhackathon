@@ -5,6 +5,8 @@ Slim entry point: creates the FastAPI app, adds middleware, and includes
 all feature routers. Each feature lives in its own module under routers/.
 """
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -44,10 +46,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cliq — AI Shopping Agent", version="2.0.0", lifespan=lifespan)
 
-# CORS for frontend dev server
+# CORS — allow frontend dev servers and Vercel production/preview deployments
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+]
+
+# Allow all Vercel preview/production URLs for this project
+VERCEL_URL = os.environ.get("VERCEL_URL")
+if VERCEL_URL:
+    ALLOWED_ORIGINS.append(f"https://{VERCEL_URL}")
+
+VERCEL_PROJECT_PRODUCTION_URL = os.environ.get("VERCEL_PROJECT_PRODUCTION_URL")
+if VERCEL_PROJECT_PRODUCTION_URL:
+    ALLOWED_ORIGINS.append(f"https://{VERCEL_PROJECT_PRODUCTION_URL}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -15,6 +15,9 @@ venv/
 node_modules/
 frontend/dist/
 
+# Vercel
+.vercel/
+
 # IDE
 .idea/
 .vscode/
