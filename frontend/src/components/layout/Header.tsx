@@ -8,9 +8,10 @@ interface HeaderProps {
   watchlistCount: number;
   onSend: (text: string) => void;
   onReset: () => void;
+  onOpenSettings: () => void;
 }
 
-export function Header({ input, setInput, loading, watchlistCount, onSend, onReset }: HeaderProps) {
+export function Header({ input, setInput, loading, watchlistCount, onSend, onReset, onOpenSettings }: HeaderProps) {
   return (
     <header
       style={{
@@ -99,6 +100,28 @@ export function Header({ input, setInput, loading, watchlistCount, onSend, onRes
           </span>
         )}
         <ThemeToggle />
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: 30 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onOpenSettings}
+          style={{
+            background: "var(--bg-muted)",
+            border: "1px solid var(--border-default)",
+            borderRadius: "50%",
+            width: 34,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            fontSize: 16,
+            color: "var(--text-muted)",
+            transition: "background 0.2s, border-color 0.2s",
+          }}
+          title="Settings"
+        >
+          {"\u2699\uFE0F"}
+        </motion.button>
       </div>
     </header>
   );

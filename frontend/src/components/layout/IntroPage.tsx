@@ -13,9 +13,10 @@ interface IntroPageProps {
   setInput: (val: string) => void;
   loading: boolean;
   onSend: (text: string) => void;
+  onOpenSettings: () => void;
 }
 
-export function IntroPage({ input, setInput, loading, onSend }: IntroPageProps) {
+export function IntroPage({ input, setInput, loading, onSend, onOpenSettings }: IntroPageProps) {
   return (
     <div
       style={{
@@ -33,6 +34,28 @@ export function IntroPage({ input, setInput, loading, onSend }: IntroPageProps) 
       {/* Top-right controls */}
       <div style={{ position: "absolute", top: 20, right: 24, display: "flex", alignItems: "center", gap: 12 }}>
         <ThemeToggle />
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: 30 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onOpenSettings}
+          style={{
+            background: "var(--bg-muted)",
+            border: "1px solid var(--border-default)",
+            borderRadius: "50%",
+            width: 34,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            fontSize: 16,
+            color: "var(--text-muted)",
+            transition: "background 0.2s, border-color 0.2s",
+          }}
+          title="Settings"
+        >
+          {"\u2699\uFE0F"}
+        </motion.button>
       </div>
 
       {/* Centered content */}

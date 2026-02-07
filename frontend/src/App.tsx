@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { UIProduct, ChatMsg, LearnedPreferences, TrackingStatus, PurchaseAlert, PersonalInfo, ShippingAddress, SavedCardDetails } from "./types";
@@ -21,10 +21,12 @@ import { PreferencesPanel } from "./components/chat/PreferencesPanel";
 
 // Products
 import { ProductCard } from "./components/products/ProductCard";
+import { BudgetFilter } from "./components/products/BudgetFilter";
 
 // Modals
 import { BuyModal } from "./components/modals/BuyModal";
 import { EditDetailsModal } from "./components/modals/EditDetailsModal";
+import { SettingsModal } from "./components/modals/SettingsModal";
 
 // Tabs
 import { HistoryTab } from "./components/tabs/HistoryTab";
@@ -46,6 +48,11 @@ export default function CliqApp() {
   const [trackingStatus, setTrackingStatus] = useState<TrackingStatus | null>(null);
   const [purchaseAlerts, setPurchaseAlerts] = useState<PurchaseAlert[]>([]);
   const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [budgetMin, setBudgetMin] = useState(0);
+  const [budgetMax, setBudgetMax] = useState(5000);
+  const [budgetFilterEnabled, setBudgetFilterEnabled] = useState(false);
+
   const [hasSearched, setHasSearched] = useState(() => {
     try {
       return localStorage.getItem("cliq_has_searched") === "true";
@@ -81,6 +88,31 @@ export default function CliqApp() {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // ── Budget filter logic ────────────────────────────
+  const priceRange = useMemo(() => {
+    if (products.length === 0) return { min: 0, max: 5000 };
+    const prices = products.map((p) => p.price);
+    const rawMin = Math.floor(Math.min(...prices) / 10) * 10;
+    const rawMax = Math.ceil(Math.max(...prices) / 10) * 10;
+    return { min: Math.max(0, rawMin - 50), max: rawMax + 100 };
+  }, [products]);
+
+  // Reset budget filter when new products come in
+  useEffect(() => {
+    if (products.length > 0) {
+      setBudgetMin(priceRange.min);
+      setBudgetMax(priceRange.max);
+      setBudgetFilterEnabled(true);
+    } else {
+      setBudgetFilterEnabled(false);
+    }
+  }, [products, priceRange]);
+
+  const filteredProducts = useMemo(() => {
+    if (!budgetFilterEnabled) return products;
+    return products.filter((p) => p.price >= budgetMin && p.price <= budgetMax);
+  }, [products, budgetMin, budgetMax, budgetFilterEnabled]);
 
   // ── Search handler ──────────────────────────────────
   const send = useCallback(
@@ -254,7 +286,14 @@ export default function CliqApp() {
 
   // ── Google-style Intro Page ──────────────────────────
   if (!hasSearched) {
-    return <IntroPage input={input} setInput={setInput} loading={loading} onSend={send} />;
+    return (
+      <>
+        <IntroPage input={input} setInput={setInput} loading={loading} onSend={send} onOpenSettings={() => setShowSettings(true)} />
+        <AnimatePresence>
+          {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+        </AnimatePresence>
+      </>
+    );
   }
 
   // ── Post-Search Results Layout ─────────────────────
@@ -276,13 +315,14 @@ export default function CliqApp() {
         watchlistCount={profile.watchlist.length}
         onSend={send}
         onReset={handleReset}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Main */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Chat + Preferences Panel */}
         <div style={{ flex: "0 0 38%", display: "flex", flexDirection: "column", borderRight: "1px solid var(--border-default)" }}>
-          <ChatPanel messages={messages} loading={loading} learned={profile.learned} onSend={send} />
+          <ChatPanel messages={messages} loading={loading} learned={profile.learned} onSend={send} input={input} setInput={setInput} />
           <PreferencesPanel
             learned={profile.learned}
             onUpdate={handleUpdateLearned}
@@ -310,7 +350,7 @@ export default function CliqApp() {
           >
             {(
               [
-                ["products", `Products (${products.length})`],
+                ["products", `Products (${filteredProducts.length}${filteredProducts.length !== products.length ? `/${products.length}` : ""})`],
                 ["history", `History (${profile.purchase_history.length})`],
                 ["watchlist", `Watchlist (${profile.watchlist.length})`],
                 ["tracking", "Tracking"],
@@ -348,16 +388,34 @@ export default function CliqApp() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}
                 >
-                  {products.length === 0 ? (
-                    <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
-                      <div style={{ fontSize: 40, marginBottom: 8 }}>{"\u{1F50D}"}</div>
-                      <p>Your search results will appear here.</p>
-                    </div>
-                  ) : (
-                    products.map((p) => <ProductCard key={p.id} product={p} onBuy={handleBuy} onWatch={handleWatch} />)
+                  {budgetFilterEnabled && products.length > 0 && (
+                    <BudgetFilter
+                      min={priceRange.min}
+                      max={priceRange.max}
+                      minVal={budgetMin}
+                      maxVal={budgetMax}
+                      onChange={(newMin, newMax) => {
+                        setBudgetMin(newMin);
+                        setBudgetMax(newMax);
+                      }}
+                    />
                   )}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+                    {products.length === 0 ? (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
+                        <div style={{ fontSize: 40, marginBottom: 8 }}>{"\u{1F50D}"}</div>
+                        <p>Your search results will appear here.</p>
+                      </div>
+                    ) : filteredProducts.length === 0 ? (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "var(--text-faint)" }}>
+                        <div style={{ fontSize: 40, marginBottom: 8 }}>{"\u{1F4B0}"}</div>
+                        <p>No products in this price range. Try adjusting the budget filter.</p>
+                      </div>
+                    ) : (
+                      filteredProducts.map((p) => <ProductCard key={p.id} product={p} onBuy={handleBuy} onWatch={handleWatch} />)
+                    )}
+                  </div>
                 </motion.div>
               )}
 
@@ -407,6 +465,11 @@ export default function CliqApp() {
           </div>
         </motion.div>
       </div>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      </AnimatePresence>
 
       {/* Buy Modal / Edit Details Modal */}
       <AnimatePresence>
