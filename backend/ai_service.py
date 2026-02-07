@@ -40,6 +40,8 @@ IMPORTANT RULES:
 - If you detect ambiguity, include a follow_up_question
 - Keep agent_message concise (2-3 sentences max)
 - Always include at least 3 products unless the user's request is extremely specific
+- CRITICAL: For source_url, use the retailer's REAL search URL with the product name as the query (e.g., "https://www.amazon.com/s?k=Sony+WH-1000XM5" or "https://www.bestbuy.com/site/searchpage.jsp?st=product+name"). NEVER use fake product URLs like "https://example.com/product" or made-up paths.
+- For image_url, provide a real, publicly accessible image URL for the product. Use Unsplash image URLs like "https://images.unsplash.com/photo-{id}?w=400&h=300&fit=crop" with a relevant photo ID for the product category.
 
 You MUST respond with valid JSON in this exact format:
 {
@@ -65,8 +67,9 @@ You MUST respond with valid JSON in this exact format:
       "value_tag": "Best value" or "Best overall" or "Fastest shipping" or "Budget pick" or "Premium pick",
       "description": "One-line product description",
       "why_recommended": "Why this matches the user's specific needs",
+      "image_url": "https://images.unsplash.com/photo-XXXXXXX?w=400&h=300&fit=crop",
       "source_name": "Amazon" or "REI" or "Nordstrom" or "Best Buy" or "Target" or other retailer,
-      "source_url": "https://example.com/product",
+      "source_url": "https://www.amazon.com/s?k=Product+Name+Brand",
       "category": "category_name",
       "available_coupons": 0,
       "key_features": ["feature1", "feature2", "feature3"]
