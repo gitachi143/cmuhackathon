@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "./context/ThemeContext";
-import type { SpendingAnalytics, SpendingHabits, NessieAccount, NessiePurchase } from "./types";
+import type { TrackingStatus, PurchaseAlert } from "./types";
 
 // ── Types ──────────────────────────────────────────────
 interface BackendProduct {
@@ -504,12 +504,8 @@ export default function CliqApp() {
   const [loading, setLoading] = useState(false);
   const [buyTarget, setBuyTarget] = useState<UIProduct | null>(null);
   const [tab, setTab] = useState("products");
-  const [analytics, setAnalytics] = useState<SpendingAnalytics | null>(null);
-  const [habits, setHabits] = useState<SpendingHabits | null>(null);
-  const [nessieAccounts, setNessieAccounts] = useState<NessieAccount[]>([]);
-  const [nessiePurchases, setNessiePurchases] = useState<NessiePurchase[]>([]);
-  const [nessieConnected, setNessieConnected] = useState(false);
-  const [nessieLoading, setNessieLoading] = useState(false);
+  const [trackingStatus, setTrackingStatus] = useState<TrackingStatus | null>(null);
+  const [purchaseAlerts, setPurchaseAlerts] = useState<PurchaseAlert[]>([]);
   const [hasSearched, setHasSearched] = useState(() => {
     try {
       return localStorage.getItem("cliq_has_searched") === "true";
@@ -583,36 +579,29 @@ export default function CliqApp() {
 
   useEffect(() => { msgEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
-  // Fetch analytics & Nessie data when spending/banking tabs are opened
-  const loadAnalytics = useCallback(async () => {
+  // Load tracking status when tracking tab is opened
+  const loadTracking = useCallback(async () => {
     try {
-      const [analyticsRes, habitsRes] = await Promise.all([
-        fetch("/api/spending/analytics").then(r => r.json()),
-        fetch("/api/spending/habits").then(r => r.json()),
+      const [statusRes, alertsRes] = await Promise.all([
+        fetch("/api/tracking/status").then(r => r.json()),
+        fetch("/api/tracking/purchase-alerts").then(r => r.json()),
       ]);
-      setAnalytics(analyticsRes);
-      setHabits(habitsRes);
-    } catch (e) { console.error("Analytics fetch error:", e); }
-  }, []);
-
-  const loadNessie = useCallback(async () => {
-    setNessieLoading(true);
-    try {
-      const [accRes, purchRes] = await Promise.all([
-        fetch("/api/nessie/accounts").then(r => r.json()),
-        fetch("/api/nessie/purchases").then(r => r.json()),
-      ]);
-      setNessieAccounts(accRes.accounts || []);
-      setNessieConnected(accRes.connected || false);
-      setNessiePurchases(purchRes.purchases || []);
-    } catch (e) { console.error("Nessie fetch error:", e); }
-    setNessieLoading(false);
+      setTrackingStatus(statusRes);
+      setPurchaseAlerts(alertsRes.alerts || []);
+    } catch (e) { console.error("Tracking fetch error:", e); }
   }, []);
 
   useEffect(() => {
-    if (tab === "spending") loadAnalytics();
-    if (tab === "banking") loadNessie();
-  }, [tab, loadAnalytics, loadNessie]);
+    if (tab === "tracking") loadTracking();
+  }, [tab, loadTracking]);
+
+  // Heartbeat: keep backend tracking alive while user is on the site
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch("/api/tracking/heartbeat", { method: "POST" }).catch(() => {});
+    }, 5 * 60 * 1000); // every 5 minutes
+    return () => clearInterval(interval);
+  }, []);
 
   const send = useCallback(async (text: string) => {
     if (!text.trim() || loading) return;
@@ -952,7 +941,7 @@ export default function CliqApp() {
           style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
         >
           <div style={{ display: "flex", borderBottom: "1px solid var(--border-default)", background: "var(--bg-surface)", flexShrink: 0, transition: "background 0.2s, border-color 0.2s", overflowX: "auto" }}>
-            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["spending", "Analytics"], ["watchlist", `Watchlist (${profile.watchlist.length})`], ["banking", "Banking"], ["searches", `Searches (${profile.search_history.length})`]] as const).map(([k, label]) => (
+            {([["products", `Products (${products.length})`], ["history", `History (${profile.purchase_history.length})`], ["watchlist", `Watchlist (${profile.watchlist.length})`], ["tracking", "Tracking"], ["spending", "Spending"], ["searches", `Searches (${profile.search_history.length})`]] as const).map(([k, label]) => (
               <button key={k} onClick={() => setTab(k)}
                 style={{ flex: 1, padding: "10px 0", fontSize: 12, fontWeight: tab === k ? 600 : 400, color: tab === k ? "var(--text-accent)" : "var(--text-muted)", background: "none", border: "none", borderBottom: tab === k ? "2px solid var(--text-accent)" : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap" }}>
                 {label}
@@ -998,12 +987,11 @@ export default function CliqApp() {
                 <motion.div key="spend" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {/* Summary Cards Row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                     {[
-                      { label: "Total Spent", value: `$${(analytics?.total_spent ?? totalSpent).toFixed(2)}`, color: "#6366f1" },
-                      { label: "Avg / Purchase", value: `$${(analytics?.avg_per_purchase ?? 0).toFixed(2)}`, color: "#10b981" },
-                      { label: "Daily Avg", value: `$${(analytics?.daily_average ?? 0).toFixed(2)}`, color: "#f59e0b" },
-                      { label: "Transactions", value: `${analytics?.purchase_count ?? profile.purchase_history.length}`, color: "#8b5cf6" },
+                      { label: "Total Spent", value: `$${totalSpent.toFixed(2)}`, color: "#6366f1" },
+                      { label: "Purchases", value: `${profile.purchase_history.length}`, color: "#10b981" },
+                      { label: "Watchlist", value: `${profile.watchlist.length}`, color: "#f59e0b" },
                     ].map(c => (
                       <div key={c.label} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: "14px 12px", textAlign: "center", borderTop: `3px solid ${c.color}` }}>
                         <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{c.value}</div>
@@ -1012,163 +1000,18 @@ export default function CliqApp() {
                     ))}
                   </div>
 
-                  {/* Data Source Badge */}
-                  {analytics?.source && (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: analytics.source.nessie_connected ? "#dcfce7" : "#fef3c7", color: analytics.source.nessie_connected ? "#166534" : "#92400e", fontWeight: 600 }}>
-                        {analytics.source.nessie_connected ? "Capital One Connected" : "Capital One: Demo Data"}
-                      </span>
-                      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                        {analytics.source.bank_transactions} bank txns + {analytics.source.app_purchases} app purchases
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Spending Habits Insights */}
-                  {habits && habits.insights.length > 0 && (
-                    <div style={{ background: "linear-gradient(135deg, #eef2ff, #faf5ff)", border: "1px solid #c7d2fe", borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#4338ca", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Smart Insights</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {habits.insights.map((insight, i) => (
-                          <div key={i} style={{ fontSize: 13, color: "#3730a3", display: "flex", alignItems: "center", gap: 6 }}>
-                            <span>💡</span> {insight}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Spending Velocity + Habits Row */}
-                  {habits && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending Habits</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Frequency</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: 600, textTransform: "capitalize" }}>{habits.frequency}</span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Busiest Day</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{habits.busiest_day || "—"}</span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Avg Weekly</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${habits.avg_weekly_spend.toFixed(2)}</span>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                            <span style={{ color: "var(--text-muted)" }}>Avg Monthly</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${habits.avg_monthly_spend.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending Velocity</div>
-                        <div style={{ textAlign: "center", padding: "8px 0" }}>
-                          <div style={{ fontSize: 28, fontWeight: 700, color: habits.spending_velocity === "increasing" ? "#ef4444" : habits.spending_velocity === "decreasing" ? "#10b981" : "var(--text-primary)" }}>
-                            {habits.spending_velocity === "increasing" ? "📈" : habits.spending_velocity === "decreasing" ? "📉" : "➡️"}
-                          </div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", textTransform: "capitalize", marginTop: 4 }}>{habits.spending_velocity}</div>
-                          {habits.velocity_pct !== 0 && (
-                            <div style={{ fontSize: 11, color: habits.velocity_pct > 0 ? "#ef4444" : "#10b981", marginTop: 2 }}>
-                              {habits.velocity_pct > 0 ? "+" : ""}{habits.velocity_pct}% vs last month
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Monthly Spending Trend (Bar Chart) */}
-                  {analytics && analytics.monthly_totals.length > 0 && (
-                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Monthly Spending Trend</div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 100 }}>
-                        {analytics.monthly_totals.map((m, i) => {
-                          const max = Math.max(...analytics.monthly_totals.map(t => t.amount));
-                          const h = max > 0 ? (m.amount / max) * 80 : 4;
-                          return (
-                            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600 }}>${m.amount.toFixed(0)}</div>
-                              <div style={{ width: "100%", height: h, background: "linear-gradient(180deg, #6366f1, #818cf8)", borderRadius: 4, minHeight: 4 }} />
-                              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>{m.month.split("-")[1]}/{m.month.split("-")[0].slice(2)}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Day of Week Breakdown */}
-                  {habits && habits.day_breakdown && (
-                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Spending by Day of Week</div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
-                        {Object.entries(habits.day_breakdown).map(([day, data]) => {
-                          const max = Math.max(...Object.values(habits.day_breakdown).map(d => d.amount));
-                          const h = max > 0 ? (data.amount / max) * 60 : 4;
-                          return (
-                            <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                              <div style={{ fontSize: 9, color: "var(--text-muted)" }}>${data.amount.toFixed(0)}</div>
-                              <div style={{ width: "100%", height: h, background: day === habits.busiest_day ? "#f59e0b" : "#c7d2fe", borderRadius: 3, minHeight: 4 }} />
-                              <div style={{ fontSize: 9, color: "var(--text-faint)" }}>{day.slice(0, 3)}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Top Merchants */}
-                  {analytics && analytics.top_merchants.length > 0 && (
-                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Top Merchants</div>
-                      {analytics.top_merchants.slice(0, 6).map((m, i) => (
-                        <div key={m.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: i < 5 ? "1px solid var(--border-default)" : "none" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-faint)", width: 16 }}>#{i + 1}</span>
-                            <span style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{m.name}</span>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{m.count} txns</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>${m.amount.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Recurring Charges */}
-                  {habits && habits.recurring_charges.length > 0 && (
-                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Recurring Charges (Subscriptions)</div>
-                      {habits.recurring_charges.map(r => (
-                        <div key={r.merchant} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                          <div>
-                            <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{r.merchant}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{r.frequency}</div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>${r.amount.toFixed(2)}/ea</div>
-                            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Total: ${r.total.toFixed(2)}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   {/* By Category */}
-                  {analytics && Object.keys(analytics.by_category).length > 0 && (
+                  {Object.keys(byCat).length > 0 && (
                     <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Spending by Category</div>
-                      {Object.entries(analytics.by_category).sort((a, b) => b[1].amount - a[1].amount).map(([cat, data]) => (
+                      {Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => (
                         <div key={cat} style={{ padding: "5px 0" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
-                            <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{cat}</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${data.amount.toFixed(2)} ({data.count})</span>
+                            <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{getCategoryEmoji(cat)} {cat.replace(/_/g, " ")}</span>
+                            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${amount.toFixed(2)}</span>
                           </div>
                           <div style={{ width: "100%", height: 6, background: "var(--bg-progress-track)", borderRadius: 3, overflow: "hidden" }}>
-                            <div style={{ height: "100%", background: "linear-gradient(90deg, #6366f1, #a78bfa)", borderRadius: 3, width: `${Math.min((data.amount / (analytics.total_spent || 1)) * 100, 100)}%` }} />
+                            <div style={{ height: "100%", background: "linear-gradient(90deg, #6366f1, #a78bfa)", borderRadius: 3, width: `${Math.min((amount / (totalSpent || 1)) * 100, 100)}%` }} />
                           </div>
                         </div>
                       ))}
@@ -1338,94 +1181,154 @@ export default function CliqApp() {
                   )}
                 </motion.div>
               )}
-              {tab === "banking" && (
-                <motion.div key="bank" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              {tab === "tracking" && (
+                <motion.div key="track" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
                   {/* Header */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 20 }}>🏦</span>
+                      <span style={{ fontSize: 20 }}>📡</span>
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Capital One Banking</div>
-                        <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Powered by Nessie API</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>Live Price Tracking</div>
+                        <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Watchlist + past purchases monitored automatically</div>
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: nessieConnected ? "#dcfce7" : "#fef3c7", color: nessieConnected ? "#166534" : "#92400e", fontWeight: 600 }}>
-                      {nessieConnected ? "Live" : "Demo Mode"}
-                    </span>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={loadTracking}
+                      style={{ fontSize: 11, padding: "4px 10px", borderRadius: 99, background: "var(--bg-option-btn)", color: "var(--text-accent)", border: "1px solid var(--border-option)", cursor: "pointer", fontWeight: 600 }}>
+                      Refresh
+                    </motion.button>
                   </div>
 
-                  {nessieLoading ? (
-                    <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
-                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} style={{ display: "inline-block", fontSize: 24 }}>⏳</motion.div>
-                      <p style={{ fontSize: 13, marginTop: 8 }}>Loading banking data...</p>
+                  {/* Tracking Status Cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                    <div style={{
+                      background: trackingStatus?.tracking_running ? "linear-gradient(135deg, #064e3b, #065f46)" : "linear-gradient(135deg, #78350f, #92400e)",
+                      borderRadius: 12, padding: 14, color: "#fff", textAlign: "center",
+                    }}>
+                      <div style={{ fontSize: 24 }}>{trackingStatus?.tracking_running ? "🟢" : "🔴"}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>{trackingStatus?.tracking_running ? "Active" : "Paused"}</div>
+                      <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>Tracking Status</div>
                     </div>
-                  ) : (
-                    <>
-                      {/* Account Cards */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-                        {nessieAccounts.map(acc => (
-                          <div key={acc.id} style={{
-                            background: acc.type === "Credit Card" ? "linear-gradient(135deg, #1e3a5f, #312e81)" : acc.type === "Savings" ? "linear-gradient(135deg, #064e3b, #065f46)" : "linear-gradient(135deg, #1e40af, #3730a3)",
-                            borderRadius: 12, padding: 16, color: "#fff",
-                          }}>
-                            <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 500 }}>{acc.type}</div>
-                            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{acc.nickname}</div>
-                            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 8 }}>${acc.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, opacity: 0.7 }}>
-                              <span>{acc.account_number}</span>
-                              {acc.rewards > 0 && <span>{acc.rewards.toLocaleString()} pts</span>}
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{trackingStatus?.watchlist_count ?? profile.watchlist.length}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Watchlist Items</div>
+                      <div style={{ fontSize: 10, color: "var(--text-faint)" }}>Every {trackingStatus?.watchlist_interval_minutes ?? 5} min</div>
+                    </div>
+                    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14, textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{trackingStatus?.purchase_count ?? profile.purchase_history.length}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Purchases Tracked</div>
+                      <div style={{ fontSize: 10, color: "var(--text-faint)" }}>Every {trackingStatus?.purchase_interval_minutes ?? 30} min</div>
+                    </div>
+                  </div>
+
+                  {/* Activity Status */}
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Activity Status</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                        <span style={{ color: "var(--text-muted)" }}>User Active</span>
+                        <span style={{ color: trackingStatus?.user_active ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                          {trackingStatus?.user_active ? "Yes" : "No — tracking paused"}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                        <span style={{ color: "var(--text-muted)" }}>Last Active</span>
+                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                          {trackingStatus?.last_active ? new Date(trackingStatus.last_active).toLocaleTimeString() : "—"}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                        <span style={{ color: "var(--text-muted)" }}>Tracking pauses after</span>
+                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>24h of inactivity</span>
+                      </div>
+                      {trackingStatus?.hours_until_pause !== undefined && trackingStatus.hours_until_pause > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                          <span style={{ color: "var(--text-muted)" }}>Time until pause</span>
+                          <span style={{ color: "#f59e0b", fontWeight: 600 }}>{trackingStatus.hours_until_pause.toFixed(1)}h remaining</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Purchase Price Alerts */}
+                  {purchaseAlerts.length > 0 && (
+                    <div style={{ background: "linear-gradient(135deg, #ecfdf5, #d1fae5)", border: "1px solid #6ee7b7", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                        Past Purchase Price Drops
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {purchaseAlerts.map(alert => (
+                          <div key={alert.product_id} style={{ background: "rgba(255,255,255,0.7)", borderRadius: 8, padding: 10 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#065f46" }}>{alert.product_name}</div>
+                                <div style={{ fontSize: 11, color: "#047857", marginTop: 2 }}>
+                                  You paid ${alert.purchased_price.toFixed(2)} — now ${alert.current_market_price.toFixed(2)}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: 16, fontWeight: 700, color: "#059669" }}>-${alert.savings.toFixed(2)}</div>
+                                <div style={{ fontSize: 10, color: "#047857" }}>{alert.drop_percent.toFixed(1)}% drop</div>
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
-
-                      {/* Total Balance Summary */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, textAlign: "center" }}>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total Balance</div>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginTop: 2 }}>
-                            ${nessieAccounts.reduce((s, a) => s + a.balance, 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </div>
-                        </div>
-                        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 10, padding: 14, textAlign: "center" }}>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total Rewards</div>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b", marginTop: 2 }}>
-                            {nessieAccounts.reduce((s, a) => s + a.rewards, 0).toLocaleString()} pts
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Recent Bank Transactions */}
-                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Recent Transactions</div>
-                        {nessiePurchases.length === 0 ? (
-                          <div style={{ textAlign: "center", padding: 20, color: "var(--text-faint)", fontSize: 13 }}>No transactions found</div>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {nessiePurchases.slice(0, 20).map((txn, i) => (
-                              <div key={txn.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < 19 ? "1px solid var(--border-default)" : "none" }}>
-                                <div>
-                                  <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500 }}>{txn.merchant_name || txn.description}</div>
-                                  <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                                    {txn.category && <span>{txn.category} · </span>}
-                                    {txn.purchase_date}
-                                  </div>
-                                </div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>${txn.amount.toFixed(2)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {nessiePurchases.length > 20 && (
-                          <div style={{ fontSize: 11, color: "var(--text-faint)", textAlign: "center", marginTop: 8 }}>
-                            Showing 20 of {nessiePurchases.length} transactions
-                          </div>
-                        )}
-                      </div>
-                    </>
+                    </div>
                   )}
+
+                  {/* Recent Tracking Activity */}
+                  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>Recent Tracking Activity</div>
+                    {(!trackingStatus?.recent_activity || trackingStatus.recent_activity.length === 0) ? (
+                      <div style={{ textAlign: "center", padding: 20, color: "var(--text-faint)", fontSize: 13 }}>
+                        No tracking activity yet. Add items to your watchlist or make purchases to start tracking.
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {trackingStatus.recent_activity.slice().reverse().slice(0, 15).map((entry, i) => {
+                          const isUpdate = entry.type.includes("update") || entry.type.includes("drop");
+                          const isPaused = entry.type.includes("paused");
+                          return (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: i < 14 ? "1px solid var(--border-default)" : "none" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ fontSize: 12 }}>
+                                  {isPaused ? "⏸️" : isUpdate ? "💰" : "🔍"}
+                                </span>
+                                <div>
+                                  <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: isUpdate ? 600 : 400 }}>
+                                    {entry.product_name || entry.reason || entry.type.replace(/_/g, " ")}
+                                  </div>
+                                  {entry.old_price !== undefined && entry.new_price !== undefined && (
+                                    <div style={{ fontSize: 11, color: entry.new_price < entry.old_price ? "#10b981" : "#ef4444" }}>
+                                      ${entry.old_price.toFixed(2)} → ${entry.new_price.toFixed(2)} ({entry.change !== undefined && entry.change < 0 ? "" : "+"}{entry.change?.toFixed(2)})
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: 10, color: "var(--text-faint)" }}>
+                                {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* How it works */}
+                  <div style={{ background: "var(--bg-muted)", borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>How Tracking Works</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+                      <div>📋 <strong>Watchlist items</strong> — prices checked every {trackingStatus?.watchlist_interval_minutes ?? 5} minutes</div>
+                      <div>🛍️ <strong>Past purchases</strong> — market prices rechecked every {trackingStatus?.purchase_interval_minutes ?? 30} minutes</div>
+                      <div>⏰ <strong>Active user only</strong> — tracking pauses if you're away for 24 hours</div>
+                      <div>🔔 <strong>Alerts</strong> — notified when prices drop on items you bought or are watching</div>
+                    </div>
+                  </div>
                 </motion.div>
               )}
               {tab === "searches" && (
