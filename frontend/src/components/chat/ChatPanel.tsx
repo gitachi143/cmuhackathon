@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import type { ChatMsg, LearnedPreferences } from "../../types";
 
 interface ChatPanelProps {
@@ -7,45 +7,6 @@ interface ChatPanelProps {
   loading: boolean;
   learned: LearnedPreferences;
   onSend: (text: string) => void;
-}
-
-/** Small pill showing a single learned fact. */
-function ContextBadge({ label, value, onRemove }: { label: string; value: string; onRemove?: () => void }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        fontSize: 11,
-        padding: "2px 8px",
-        borderRadius: 99,
-        background: "var(--bg-option-btn)",
-        color: "var(--text-accent)",
-        border: "1px solid var(--border-option)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span style={{ fontWeight: 600 }}>{label}:</span> {value}
-      {onRemove && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: 11,
-            color: "var(--text-muted)",
-            padding: "0 2px",
-            lineHeight: 1,
-          }}
-          title={`Remove ${label}`}
-        >
-          x
-        </button>
-      )}
-    </span>
-  );
 }
 
 /** Renders the "thinking" bubble that shows the AI's reasoning. */
@@ -75,23 +36,10 @@ function ThinkingBubble({ text }: { text: string }) {
 
 export function ChatPanel({ messages, loading, learned, onSend }: ChatPanelProps) {
   const msgEnd = useRef<HTMLDivElement>(null);
-  const [showContext, setShowContext] = useState(true);
 
   useEffect(() => {
     msgEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
-
-  // Collect active context badges from learned prefs
-  const contextItems: { label: string; value: string }[] = [];
-  if (learned.gender) contextItems.push({ label: "Gender", value: learned.gender });
-  if (learned.age_range) contextItems.push({ label: "Age", value: learned.age_range });
-  if (learned.style) contextItems.push({ label: "Style", value: learned.style });
-  if (learned.climate) contextItems.push({ label: "Climate", value: learned.climate });
-  learned.interests.forEach((i) => contextItems.push({ label: "Interest", value: i }));
-  learned.use_cases.forEach((u) => contextItems.push({ label: "Use", value: u }));
-  learned.favorite_colors.forEach((c) => contextItems.push({ label: "Color", value: c }));
-  Object.entries(learned.sizes).forEach(([k, v]) => contextItems.push({ label: `Size (${k})`, value: v }));
-  learned.dislikes.forEach((d) => contextItems.push({ label: "Dislike", value: d }));
 
   return (
     <motion.div
@@ -100,51 +48,6 @@ export function ChatPanel({ messages, loading, learned, onSend }: ChatPanelProps
       transition={{ duration: 0.3 }}
       style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}
     >
-      {/* Context bar - shows what Cliq knows */}
-      {contextItems.length > 0 && (
-        <div
-          style={{
-            padding: "6px 12px",
-            borderBottom: "1px solid var(--border-default)",
-            background: "var(--bg-surface)",
-            transition: "background 0.2s",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showContext ? 4 : 0 }}>
-            <button
-              onClick={() => setShowContext((p) => !p)}
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              {showContext ? "\u25BC" : "\u25B6"} What Cliq knows about you ({contextItems.length})
-            </button>
-          </div>
-          <AnimatePresence>
-            {showContext && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                style={{ display: "flex", gap: 4, flexWrap: "wrap", overflow: "hidden" }}
-              >
-                {contextItems.map((item, i) => (
-                  <ContextBadge key={`${item.label}-${item.value}-${i}`} label={item.label} value={item.value} />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>

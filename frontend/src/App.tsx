@@ -45,6 +45,7 @@ export default function CliqApp() {
   const [tab, setTab] = useState("products");
   const [trackingStatus, setTrackingStatus] = useState<TrackingStatus | null>(null);
   const [purchaseAlerts, setPurchaseAlerts] = useState<PurchaseAlert[]>([]);
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(() => {
     try {
       return localStorage.getItem("cliq_has_searched") === "true";
@@ -89,6 +90,14 @@ export default function CliqApp() {
         setHasSearched(true);
         setMessages([{ id: "w", role: "agent", text: "Let me think about what you need...", thinking: null, options: [], products: [] }]);
       }
+
+      // If there's a pending query (user is answering a follow-up), combine them
+      let queryToSend = text;
+      if (pendingQuery) {
+        queryToSend = `${pendingQuery} - ${text}`;
+        setPendingQuery(null);
+      }
+
       const userMsg: ChatMsg = { id: mkId(), role: "user", text, thinking: null, options: [], products: [] };
       setMessages((p) => [...p, userMsg]);
       setLoading(true);
@@ -97,7 +106,7 @@ export default function CliqApp() {
           .filter((m) => m.role !== "follow_up")
           .slice(-10)
           .map((m) => ({ role: m.role, text: m.text }));
-        const result = await searchBackend(text, profile, history);
+        const result = await searchBackend(queryToSend, profile, history);
 
         // Record search in history
         setProfile((prev) => ({
@@ -114,6 +123,8 @@ export default function CliqApp() {
         }
 
         if (result.ambiguous && result.follow_up_question) {
+          // Store the original query so follow-up answers are combined with it
+          setPendingQuery(text);
           setMessages((p) => [...p, {
             id: mkId(),
             role: "follow_up",
@@ -155,7 +166,7 @@ export default function CliqApp() {
       }
       setLoading(false);
     },
-    [messages, loading, profile, hasSearched, mkId, setMessages, setProducts, setProfile]
+    [messages, loading, profile, hasSearched, pendingQuery, mkId, setMessages, setProducts, setProfile]
   );
 
   // ── Product action handlers ──────────────────────────
